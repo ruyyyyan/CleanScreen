@@ -32,32 +32,35 @@ jobs:
       - name: Copy & Rename APK
         run: |
           mkdir -p release_output
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.2-iQOONeo11.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.3-iQOONeo11.apk
           ls -lh release_output/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CleanScreen-v1.0.2-iQOONeo11
-          path: release_output/CleanScreen-v1.0.2-iQOONeo11.apk
+          name: CleanScreen-v1.0.3-iQOONeo11
+          path: release_output/CleanScreen-v1.0.3-iQOONeo11.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.2
-          name: "清屏 CleanScreen v1.0.2 (多轮突发扫描 · 防误触透明遮罩 · 自定义词库)"
+          tag_name: v1.0.3
+          name: "清屏 CleanScreen v1.0.3 (彻底解决误触与无障碍被关问题)"
           body: |
-            ### 📱 清屏 (CleanScreen) v1.0.2 增强升级版
+            ### 📱 清屏 (CleanScreen) v1.0.3 关键精度与保活修复版
 
-            专为 **iQOO Neo 11 / OriginOS** 深度调优的高性能开屏广告拦截与防误触跳转工具：
+            针对用户反馈的 **“无障碍被系统自动关闭”** 以及 **“误触其他应用按钮”** 进行的彻底重构与修复：
 
-            #### 🚀 新增与增强功能
-            - ⚡ **多轮异步突发扫描 (Burst Scan)**：针对网络延迟加载的开屏广告，在启动时以阶梯高频扫描（120ms~2200ms），秒杀异步广告。
-            - 🛡️ **物理级开屏防误触透明遮罩**：大屏握持神器！在开屏前 1.8 秒自动覆盖屏幕中下方安全防触层，仅暴露右上角跳过区域，彻底物理杜绝误触全屏伪装广告。
-            - 🎯 **纯图形右上角智能探测点击**：针对微博、网易云等自绘/纯图片/无文字跳过按钮，增加屏幕右上角几何启发式探测，拦截成功率接近 100%。
-            - 📱 **已安装应用全局管理**：开箱即展示手机上所有已安装应用，支持独立白名单/黑名单一键开关。
-            - 📖 **自定义跳过关键词库**：支持自由添加、删除个性化跳过词汇（如“离开”、“忽略”、“知道了”）。
-          files: release_output/CleanScreen-v1.0.2-iQOONeo11.apk
+            #### 🛠️ 关键修复内容
+            1. **彻底解决误触其他应用按钮**：
+               - **废除盲目右上角盲点机制**：彻底删除了盲目探测右上角节点的逻辑（彻底解决误触微信右上角“+”、其他 App 搜索或菜单按钮的问题）。
+               - **严格限制扫描时空窗口**：仅在 App 冷启动的前 3.5 秒内才允许检索开屏广告。进入 App 内部后，绝对不再触发任何模拟点击！
+               - **严格跳过关键词匹配**：文字长度严格限制在 8 字以内，并精确校验“跳过/关闭广告/Skip”正则。
+               - **坐标合法性双重验证**：跳过按钮必须位于屏幕顶部 25% 或底部 15% 边缘，杜绝点击正文中央。
+            2. **彻底解决无障碍被 OriginOS 自动关闭**：
+               - **大幅减轻无障碍系统负荷**：事件监听仅保留 `TYPE_WINDOW_STATE_CHANGED`，事件超时设定为 100ms，移除臃肿的非重要视图检索标志，彻底杜绝 IPC 阻塞导致的系统强制关闭无障碍服务。
+               - **优化前台守护与 stopWithTask=false**：防止多任务清理时被系统杀死。
+          files: release_output/CleanScreen-v1.0.3-iQOONeo11.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

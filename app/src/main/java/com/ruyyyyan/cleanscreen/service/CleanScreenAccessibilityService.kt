@@ -7,14 +7,12 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.util.DisplayMetrics
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.ruyyyyan.cleanscreen.data.model.InterceptRecord
 import com.ruyyyyan.cleanscreen.data.repository.InterceptRepository
 import com.ruyyyyan.cleanscreen.utils.FloatingToast
-import com.ruyyyyan.cleanscreen.utils.MisclickShieldManager
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
 
@@ -23,16 +21,19 @@ class CleanScreenAccessibilityService : AccessibilityService() {
     private val repository by lazy { InterceptRepository.getInstance(applicationContext) }
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Cooldown map: packageName -> last skip timestamp
+    // 冷却时间控制：包名 -> 上次跳过时间
     private val lastSkipTimes = ConcurrentHashMap<String, Long>()
 
-    // Tracking app launches for misclick jump detection: packageName -> launch timestamp
+    // 追踪每个 App 的冷启动时间戳：包名 -> 启动时间
     private val appLaunchTimes = ConcurrentHashMap<String, Long>()
-    private var lastForegroundPackage: String = ""
+    // 标记当前应用启动是否已完成开屏跳过
+    private val appSkippedState = ConcurrentHashMap<String, Boolean>()
 
-    // Screen dimensions
+    private var lastForegroundPackage: String = ""
     private var screenWidth: Int = 1080
     private var screenHeight: Int = 2400
+
+    private val pendingScanRunnables = mutableListOf<Runnable>()
 
     companion object {
         private const val TAG = "CleanScreenService"
@@ -41,16 +42,11 @@ class CleanScreenAccessibilityService : AccessibilityService() {
         var isServiceRunning = false
             private set
 
-        // Keywords for skip detection
-        private val SKIP_PATTERNS = listOf(
-            Pattern.compile(".*跳\\s*过.*"),
-            Pattern.compile(".*关闭广告.*"),
-            Pattern.compile(".*\\d+\\s*s?\\s*跳过.*"),
-            Pattern.compile(".*跳过\\s*\\d+\\s*s?.*"),
-            Pattern.compile("(?i).*skip.*")
-        )
+        // 精确匹配规则：仅匹配纯粹的“跳过”、“关闭广告”、“Skip”或带秒数的倒计时按钮
+        // 杜绝匹配文章内长句，如“这个步骤可以跳过”
+        private val SKIP_REGEX = Pattern.compile("^(?:\\d+s?\\s*)?(?:跳过|关闭广告|Skip|SKIP|跳\\s*过)(?:\\s*\\d+s?)?$")
 
-        // Known common ad landing target packages (for misclick jump prevention)
+        // 知名电商/导流目标包名（用于误触跳转拦截）
         private val JUMP_TARGET_PACKAGES = setOf(
             "com.taobao.taobao",           // 淘宝
             "com.jingdong.app.mall",       // 京东
@@ -58,13 +54,12 @@ class CleanScreenAccessibilityService : AccessibilityService() {
             "com.sankuai.meituan",         // 美团
             "com.tmall.wireless",          // 天猫
             "com.vipancai.vipshop",        // 唯品会
-            "com.suning.mobile.ebuy",      // 苏宁
             "com.bbk.appstore",            // vivo应用商店
             "com.vivo.appstore",           // vivo应用商店
             "com.heytap.market"            // 软件商店
         )
 
-        // System packages to ignore
+        // 系统桌面与自身包名忽略
         private val IGNORED_PACKAGES = setOf(
             "com.android.systemui",
             "com.bbk.launcher2",
@@ -73,26 +68,26 @@ class CleanScreenAccessibilityService : AccessibilityService() {
             "com.ruyyyyan.cleanscreen"
         )
 
-        // Staged burst delays (ms) for asynchronously loaded ads
-        private val SCAN_DELAYS = longArrayOf(120, 280, 550, 950, 1500, 2200)
+        // 仅在启动前 3 秒内安排轻量突发延迟检查
+        private val BURST_DELAYS = longArrayOf(200, 500, 1000)
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         isServiceRunning = true
         updateScreenDimensions()
-        Log.i(TAG, "CleanScreen Accessibility Service Connected successfully")
+        Log.i(TAG, "CleanScreen Service Connected. Ultra-precise mode enabled.")
     }
 
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
-        MisclickShieldManager.removeShield()
-        Log.i(TAG, "CleanScreen Accessibility Service Destroyed")
+        clearAllPendingScans()
+        Log.i(TAG, "CleanScreen Service Destroyed.")
     }
 
     override fun onInterrupt() {
-        Log.w(TAG, "CleanScreen Accessibility Service Interrupted")
+        Log.w(TAG, "CleanScreen Service Interrupted.")
     }
 
     private fun updateScreenDimensions() {
@@ -100,8 +95,8 @@ class CleanScreenAccessibilityService : AccessibilityService() {
             val metrics = resources.displayMetrics
             screenWidth = metrics.widthPixels
             screenHeight = metrics.heightPixels
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (e: Throwable) {
+            // Ignore
         }
     }
 
@@ -114,16 +109,20 @@ class CleanScreenAccessibilityService : AccessibilityService() {
 
             val now = System.currentTimeMillis()
 
-            when (event.eventType) {
-                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                    handleWindowStateChanged(pkgName, now)
-                    scanAndSkipAd(pkgName, rootInActiveWindow)
-                    scheduleBurstScans(pkgName)
-                }
-                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
-                    val launchTime = appLaunchTimes[pkgName] ?: 0L
-                    if (now - launchTime < 4500) {
-                        scanAndSkipAd(pkgName, rootInActiveWindow)
+            // 核心：仅在窗口发生切换时响应
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                handleWindowStateChanged(pkgName, now)
+
+                // 核心安全准则：只有在 App 启动的前 3.5 秒内才允许扫描开屏跳过按钮！
+                // 一旦超过 3.5 秒或当前启动已经跳过过一次，严禁再扫描，彻底杜绝在 App 内部使用时误触任何按钮！
+                val launchTime = appLaunchTimes[pkgName] ?: 0L
+                val alreadySkipped = appSkippedState[pkgName] ?: false
+
+                if (now - launchTime < 3500 && !alreadySkipped) {
+                    clearAllPendingScans()
+                    val skipped = scanAndSkipAd(pkgName, rootInActiveWindow)
+                    if (!skipped) {
+                        scheduleBurstScans(pkgName)
                     }
                 }
             }
@@ -132,37 +131,53 @@ class CleanScreenAccessibilityService : AccessibilityService() {
         }
     }
 
-    /**
-     * 针对网络延迟加载的开屏广告，执行多轮异步突发扫描
-     */
+    private fun clearAllPendingScans() {
+        for (runnable in pendingScanRunnables) {
+            mainHandler.removeCallbacks(runnable)
+        }
+        pendingScanRunnables.clear()
+    }
+
     private fun scheduleBurstScans(pkgName: String) {
         if (!repository.isFastModeEnabled || !repository.isAppEnabled(pkgName)) return
 
-        for (delay in SCAN_DELAYS) {
-            mainHandler.postDelayed({
-                try {
-                    val now = System.currentTimeMillis()
-                    val lastSkip = lastSkipTimes[pkgName] ?: 0L
-                    if (now - lastSkip >= 3000 && lastForegroundPackage == pkgName) {
-                        scanAndSkipAd(pkgName, rootInActiveWindow)
+        for (delay in BURST_DELAYS) {
+            val runnable = object : Runnable {
+                override fun run() {
+                    try {
+                        val now = System.currentTimeMillis()
+                        val launchTime = appLaunchTimes[pkgName] ?: 0L
+                        val alreadySkipped = appSkippedState[pkgName] ?: false
+
+                        // 超过 3.5 秒绝不再检查
+                        if (now - launchTime >= 3500 || alreadySkipped || lastForegroundPackage != pkgName) {
+                            return
+                        }
+
+                        val skipped = scanAndSkipAd(pkgName, rootInActiveWindow)
+                        if (skipped) {
+                            clearAllPendingScans()
+                        }
+                    } catch (e: Throwable) {
+                        // Suppress scan error
                     }
-                } catch (e: Throwable) {
-                    // Suppress scan error
                 }
-            }, delay)
+            }
+            pendingScanRunnables.add(runnable)
+            mainHandler.postDelayed(runnable, delay)
         }
     }
 
     private fun handleWindowStateChanged(currentPkg: String, now: Long) {
         try {
-            // Check for misclick cross-app jump if enabled
+            // 误触跨应用唤起返回防护
             if (repository.isPreventMisclickJumpEnabled && lastForegroundPackage.isNotEmpty()) {
                 val lastPkg = lastForegroundPackage
                 val lastLaunchTime = appLaunchTimes[lastPkg] ?: 0L
 
-                // If user opened an app within 3 seconds, and it jumped to shopping/ad app:
+                // 启动 3 秒内若突发跨应用跳往购物平台
                 if (currentPkg != lastPkg &&
-                    now - lastLaunchTime < 3200 &&
+                    now - lastLaunchTime < 3000 &&
                     currentPkg in JUMP_TARGET_PACKAGES &&
                     lastPkg !in JUMP_TARGET_PACKAGES
                 ) {
@@ -177,7 +192,7 @@ class CleanScreenAccessibilityService : AccessibilityService() {
                                     packageName = lastPkg,
                                     appName = originalAppName,
                                     type = InterceptRecord.TYPE_MISCLICK_RETURN,
-                                    description = "拦截从【$originalAppName】跳转至【$targetAppName】的误触广告"
+                                    description = "拦截从【$originalAppName】误触跳转至【$targetAppName】"
                                 )
                             )
 
@@ -187,7 +202,6 @@ class CleanScreenAccessibilityService : AccessibilityService() {
                             if (repository.isVibrateEnabled) {
                                 FloatingToast.vibrateFeedback(applicationContext)
                             }
-                            KeepAliveService.updateNotification(applicationContext)
                         } catch (e: Throwable) {
                             Log.e(TAG, "Error performing auto-back", e)
                         }
@@ -197,47 +211,36 @@ class CleanScreenAccessibilityService : AccessibilityService() {
                 }
             }
 
+            // 新应用启动
             if (currentPkg != lastForegroundPackage) {
                 appLaunchTimes[currentPkg] = now
+                appSkippedState[currentPkg] = false
                 lastForegroundPackage = currentPkg
-
-                // Show anti-misclick shield if enabled
-                if (repository.isShieldOverlayEnabled && repository.isAppEnabled(currentPkg)) {
-                    MisclickShieldManager.showSplashShield(applicationContext)
-                }
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Error in handleWindowStateChanged", e)
         }
     }
 
-    private fun scanAndSkipAd(packageName: String, rootNode: AccessibilityNodeInfo?) {
-        if (rootNode == null) return
-        if (!repository.isAppEnabled(packageName)) return
+    private fun scanAndSkipAd(packageName: String, rootNode: AccessibilityNodeInfo?): Boolean {
+        if (rootNode == null) return false
+        if (!repository.isAppEnabled(packageName)) return false
 
         val now = System.currentTimeMillis()
         val lastSkip = lastSkipTimes[packageName] ?: 0L
         if (now - lastSkip < 3000) {
-            return
+            return false
         }
 
         try {
-            // 1. 尝试规则与关键词匹配
-            var targetNode = findSkipButtonNode(rootNode)
-
-            // 2. 若文本未匹配到，尝试右上角几何启发式探测（应对纯图无文字跳过按钮）
-            if (targetNode == null) {
-                targetNode = findTopRightCornerAdNode(rootNode)
-            }
-
+            // 严谨精准匹配：只匹配真正的“跳过”节点
+            val targetNode = findStrictSkipNode(rootNode)
             if (targetNode != null) {
                 val clicked = clickNodeOrGesture(targetNode)
                 if (clicked) {
                     lastSkipTimes[packageName] = now
+                    appSkippedState[packageName] = true // 标记当前启动已完成跳过，不再进行后续扫描
                     val appName = getAppLabel(packageName)
-
-                    // 成功跳过后立即移除防误触遮罩
-                    MisclickShieldManager.removeShield()
 
                     repository.recordIntercept(
                         InterceptRecord(
@@ -255,57 +258,37 @@ class CleanScreenAccessibilityService : AccessibilityService() {
                         FloatingToast.vibrateFeedback(applicationContext)
                     }
 
-                    KeepAliveService.updateNotification(applicationContext)
+                    return true
                 }
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Error in scanAndSkipAd", e)
         }
+
+        return false
     }
 
-    private fun findSkipButtonNode(root: AccessibilityNodeInfo, depth: Int = 0): AccessibilityNodeInfo? {
-        if (depth > 14) return null
+    /**
+     * 严谨深度优先检索：
+     * 1. 文本长度必须 <= 8
+     * 2. 严格匹配“跳过/关闭广告/Skip”正则
+     * 3. 坐标必须位于屏幕顶部 25% 或底部 15% 区域（绝对不在屏幕正中间误触正文）
+     */
+    private fun findStrictSkipNode(root: AccessibilityNodeInfo, depth: Int = 0): AccessibilityNodeInfo? {
+        if (depth > 12) return null
 
         val text = root.text?.toString()?.trim()
         val desc = root.contentDescription?.toString()?.trim()
         val viewId = root.viewIdResourceName?.lowercase() ?: ""
 
-        if (isSkipMatch(text) || isSkipMatch(desc) || isSkipViewId(viewId)) {
-            return root
-        }
+        if (isStrictSkipMatch(text) || isStrictSkipMatch(desc) || isStrictSkipViewId(viewId)) {
+            // 检验屏幕坐标位置，开屏广告跳过按钮几乎都在顶部或底端，绝非正中央内容区
+            val rect = Rect()
+            root.getBoundsInScreen(rect)
+            val isTopZone = rect.top <= screenHeight * 0.25
+            val isBottomZone = rect.bottom >= screenHeight * 0.85
 
-        val childCount = root.childCount
-        for (i in 0 until childCount) {
-            val child = root.getChild(i) ?: continue
-            val found = findSkipButtonNode(child, depth + 1)
-            if (found != null) {
-                return found
-            }
-        }
-
-        return null
-    }
-
-    /**
-     * 智能右上角区域启发式探测（专门解决自绘或纯图片跳过按钮）
-     */
-    private fun findTopRightCornerAdNode(root: AccessibilityNodeInfo, depth: Int = 0): AccessibilityNodeInfo? {
-        if (depth > 12) return null
-
-        val rect = Rect()
-        root.getBoundsInScreen(rect)
-
-        // 位于屏幕右上角 35% 宽度，顶部 16% 高度之内
-        val inTopRightZone = rect.left >= screenWidth * 0.65 &&
-                rect.top <= screenHeight * 0.16 &&
-                rect.bottom > 20 &&
-                rect.width() in 40..500 &&
-                rect.height() in 25..250
-
-        if (inTopRightZone && (root.isClickable || root.childCount == 0)) {
-            val text = root.text?.toString() ?: ""
-            // 如果带数字倒计时或简短文字或空文字纯图按钮
-            if (text.length <= 8) {
+            if (isTopZone || isBottomZone) {
                 return root
             }
         }
@@ -313,7 +296,7 @@ class CleanScreenAccessibilityService : AccessibilityService() {
         val childCount = root.childCount
         for (i in 0 until childCount) {
             val child = root.getChild(i) ?: continue
-            val found = findTopRightCornerAdNode(child, depth + 1)
+            val found = findStrictSkipNode(child, depth + 1)
             if (found != null) {
                 return found
             }
@@ -322,20 +305,18 @@ class CleanScreenAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun isSkipMatch(content: String?): Boolean {
-        if (content.isNullOrEmpty() || content.length > 25) return false
+    private fun isStrictSkipMatch(content: String?): Boolean {
+        if (content.isNullOrEmpty() || content.length > 8) return false
 
-        // 检查系统内置正则
-        for (pattern in SKIP_PATTERNS) {
-            if (pattern.matcher(content).matches()) {
-                return true
-            }
+        // 精确正则匹配
+        if (SKIP_REGEX.matcher(content).matches()) {
+            return true
         }
 
-        // 检查用户自定义关键词
+        // 检查用户自定义关键词（同样限制长度，杜绝长文命中）
         val customKeywords = repository.getCustomKeywords()
         for (keyword in customKeywords) {
-            if (content.contains(keyword, ignoreCase = true)) {
+            if (keyword.length <= 6 && content.equals(keyword, ignoreCase = true)) {
                 return true
             }
         }
@@ -343,40 +324,38 @@ class CleanScreenAccessibilityService : AccessibilityService() {
         return false
     }
 
-    private fun isSkipViewId(viewId: String): Boolean {
+    private fun isStrictSkipViewId(viewId: String): Boolean {
         if (viewId.isEmpty()) return false
-        return viewId.contains("skip") ||
-                viewId.contains("splash_tv") ||
-                viewId.contains("btn_skip") ||
-                viewId.contains("tt_splash_skip") ||
-                viewId.contains("ksad_splash_skip")
+        return viewId.contains("tt_splash_skip") ||
+                viewId.contains("ksad_splash_skip") ||
+                viewId.endsWith(":id/skip_view") ||
+                viewId.endsWith(":id/btn_skip") ||
+                viewId.endsWith(":id/splash_skip_tv")
     }
 
     private fun clickNodeOrGesture(node: AccessibilityNodeInfo): Boolean {
         try {
+            // 优先尝试节点原生点击
             if (node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                 return true
             }
 
-            var parent = node.parent
-            var attempts = 0
-            while (parent != null && attempts < 3) {
-                if (parent.isClickable && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                    return true
-                }
-                parent = parent.parent
-                attempts++
+            // 向上回溯一层父容器尝试点击
+            val parent = node.parent
+            if (parent != null && parent.isClickable && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true
             }
 
+            // 手势坐标模拟点击
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 val rect = Rect()
                 node.getBoundsInScreen(rect)
-                if (rect.width() > 0 && rect.height() > 0) {
+                if (rect.width() in 20..600 && rect.height() in 20..300) {
                     val clickPath = Path().apply {
                         moveTo(rect.centerX().toFloat(), rect.centerY().toFloat())
                     }
                     val gesture = GestureDescription.Builder()
-                        .addStroke(GestureDescription.StrokeDescription(clickPath, 0, 40))
+                        .addStroke(GestureDescription.StrokeDescription(clickPath, 0, 30))
                         .build()
                     return dispatchGesture(gesture, null, null)
                 }

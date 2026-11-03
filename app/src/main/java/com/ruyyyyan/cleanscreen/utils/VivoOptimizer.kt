@@ -41,7 +41,6 @@ object VivoOptimizer {
                     "com.iqoo.secure.MainGuideActivity"
                 )
             ),
-            // 通用 vivo 软件权限管理
             Intent().setComponent(
                 ComponentName(
                     "com.vivo.permissionmanager",

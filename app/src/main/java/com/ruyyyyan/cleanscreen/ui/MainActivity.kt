@@ -1,16 +1,20 @@
 package com.ruyyyyan.cleanscreen.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import com.ruyyyyan.cleanscreen.R
 import com.ruyyyyan.cleanscreen.data.repository.InterceptRepository
 import com.ruyyyyan.cleanscreen.databinding.ActivityMainBinding
-import com.ruyyyyan.cleanscreen.service.KeepAliveService
+import com.ruyyyyan.cleanscreen.service.CleanScreenAccessibilityService
 import com.ruyyyyan.cleanscreen.utils.PermissionUtils
 import com.ruyyyyan.cleanscreen.utils.VivoOptimizer
 
@@ -22,6 +26,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+        private const val REQUEST_CODE_NOTIFICATIONS = 1001
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,6 +36,7 @@ class MainActivity : AppCompatActivity() {
             setContentView(binding.root)
 
             setupListeners()
+            checkAndRequestNotificationPermission()
         } catch (e: Throwable) {
             Log.e(TAG, "Error in onCreate", e)
         }
@@ -45,17 +51,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkAndRequestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    REQUEST_CODE_NOTIFICATIONS
+                )
+            }
+        }
+    }
+
     private fun setupListeners() {
         binding.switchMaster.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingUi) return@setOnCheckedChangeListener
             repository.isMasterEnabled = isChecked
             if (isChecked) {
-                KeepAliveService.startService(this)
                 if (!PermissionUtils.isAccessibilityServiceEnabled(this)) {
                     Toast.makeText(this, "请点击下方【无障碍: 点击开启】激活服务", Toast.LENGTH_SHORT).show()
                 }
-            } else {
-                KeepAliveService.stopService(this)
             }
             updateDashboard()
         }
