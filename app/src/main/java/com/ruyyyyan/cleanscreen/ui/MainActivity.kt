@@ -16,7 +16,9 @@ import com.ruyyyyan.cleanscreen.R
 import com.ruyyyyan.cleanscreen.data.repository.InterceptRepository
 import com.ruyyyyan.cleanscreen.databinding.ActivityMainBinding
 import com.ruyyyyan.cleanscreen.service.CleanScreenAccessibilityService
+import com.ruyyyyan.cleanscreen.utils.AccessibilityServiceState
 import com.ruyyyyan.cleanscreen.utils.PermissionUtils
+import com.ruyyyyan.cleanscreen.utils.ServiceStateHolder
 import com.ruyyyyan.cleanscreen.utils.VivoOptimizer
 import com.ruyyyyan.cleanscreen.utils.XiaomiOptimizer
 
