@@ -18,6 +18,8 @@ class InterceptRepository private constructor(private val context: Context) {
         private const val KEY_VIBRATE = "key_vibrate"
         private const val KEY_PREVENT_MISCLICK_JUMP = "key_prevent_misclick_jump"
         private const val KEY_FAST_MODE = "key_fast_mode"
+        private const val KEY_SHIELD_OVERLAY = "key_shield_overlay"
+        private const val KEY_CUSTOM_KEYWORDS = "key_custom_keywords"
 
         @Volatile
         private var instance: InterceptRepository? = null
@@ -48,6 +50,27 @@ class InterceptRepository private constructor(private val context: Context) {
     var isFastModeEnabled: Boolean
         get() = prefs.getBoolean(KEY_FAST_MODE, true)
         set(value) = prefs.edit().putBoolean(KEY_FAST_MODE, value).apply()
+
+    var isShieldOverlayEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SHIELD_OVERLAY, false)
+        set(value) = prefs.edit().putBoolean(KEY_SHIELD_OVERLAY, value).apply()
+
+    fun getCustomKeywords(): MutableSet<String> {
+        val defaultSet = setOf("跳过", "关闭广告", "Skip", "SKIP")
+        return prefs.getStringSet(KEY_CUSTOM_KEYWORDS, defaultSet)?.toMutableSet() ?: defaultSet.toMutableSet()
+    }
+
+    fun addCustomKeyword(keyword: String) {
+        val current = getCustomKeywords()
+        current.add(keyword.trim())
+        prefs.edit().putStringSet(KEY_CUSTOM_KEYWORDS, current).apply()
+    }
+
+    fun removeCustomKeyword(keyword: String) {
+        val current = getCustomKeywords()
+        current.remove(keyword.trim())
+        prefs.edit().putStringSet(KEY_CUSTOM_KEYWORDS, current).apply()
+    }
 
     fun recordIntercept(record: InterceptRecord) {
         dbHelper.addInterceptLog(record)

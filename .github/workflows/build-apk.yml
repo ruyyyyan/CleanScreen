@@ -32,29 +32,32 @@ jobs:
       - name: Copy & Rename APK
         run: |
           mkdir -p release_output
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.1-iQOONeo11.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.2-iQOONeo11.apk
           ls -lh release_output/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CleanScreen-v1.0.1-iQOONeo11
-          path: release_output/CleanScreen-v1.0.1-iQOONeo11.apk
+          name: CleanScreen-v1.0.2-iQOONeo11
+          path: release_output/CleanScreen-v1.0.2-iQOONeo11.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.1
-          name: "清屏 CleanScreen v1.0.1 (修复无障碍与保活崩溃)"
+          tag_name: v1.0.2
+          name: "清屏 CleanScreen v1.0.2 (多轮突发扫描 · 防误触透明遮罩 · 自定义词库)"
           body: |
-            ### 📱 清屏 (CleanScreen) v1.0.1 紧急修复版
+            ### 📱 清屏 (CleanScreen) v1.0.2 增强升级版
 
-            针对 Android 14/15 及 iQOO Neo 11 / OriginOS 闪退问题的全面修复：
-            - 🛠️ **修复点开即闪退问题**：移除 Application 初始化阶段非法的 startForegroundService，解决 Android 14 前台服务限制导致的崩溃。
-            - 🛠️ **修复无障碍服务开启后自关/闪退**：重构前台守护服务与 ServiceCompat 兼容层，添加全链路异常捕获保护。
-            - 🛠️ **优化界面事件防循环触发**：修复主界面开关更新导致的无障碍设置跳转与死循环。
-            - 🎨 **替换控件背景 Drawable**：避免矢量图背景在不同系统版本中导致的 InflateException。
-          files: release_output/CleanScreen-v1.0.1-iQOONeo11.apk
+            专为 **iQOO Neo 11 / OriginOS** 深度调优的高性能开屏广告拦截与防误触跳转工具：
+
+            #### 🚀 新增与增强功能
+            - ⚡ **多轮异步突发扫描 (Burst Scan)**：针对网络延迟加载的开屏广告，在启动时以阶梯高频扫描（120ms~2200ms），秒杀异步广告。
+            - 🛡️ **物理级开屏防误触透明遮罩**：大屏握持神器！在开屏前 1.8 秒自动覆盖屏幕中下方安全防触层，仅暴露右上角跳过区域，彻底物理杜绝误触全屏伪装广告。
+            - 🎯 **纯图形右上角智能探测点击**：针对微博、网易云等自绘/纯图片/无文字跳过按钮，增加屏幕右上角几何启发式探测，拦截成功率接近 100%。
+            - 📱 **已安装应用全局管理**：开箱即展示手机上所有已安装应用，支持独立白名单/黑名单一键开关。
+            - 📖 **自定义跳过关键词库**：支持自由添加、删除个性化跳过词汇（如“离开”、“忽略”、“知道了”）。
+          files: release_output/CleanScreen-v1.0.2-iQOONeo11.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
