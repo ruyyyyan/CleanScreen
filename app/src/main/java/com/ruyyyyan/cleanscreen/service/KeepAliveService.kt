@@ -7,9 +7,12 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.ruyyyyan.cleanscreen.R
 import com.ruyyyyan.cleanscreen.data.repository.InterceptRepository
 import com.ruyyyyan.cleanscreen.ui.MainActivity
@@ -19,21 +22,39 @@ class KeepAliveService : Service() {
     companion object {
         const val CHANNEL_ID = "channel_cleanscreen_keeper"
         const val NOTIFICATION_ID = 1001
+        private const val TAG = "KeepAliveService"
 
         fun startService(context: Context) {
-            val intent = Intent(context, KeepAliveService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                val intent = Intent(context, KeepAliveService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to start KeepAliveService safely: ${e.message}")
             }
         }
 
         fun updateNotification(context: Context) {
-            val intent = Intent(context, KeepAliveService::class.java).apply {
-                action = "ACTION_UPDATE"
+            try {
+                val intent = Intent(context, KeepAliveService::class.java).apply {
+                    action = "ACTION_UPDATE"
+                }
+                context.startService(intent)
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to update notification: ${e.message}")
             }
-            context.startService(intent)
+        }
+
+        fun stopService(context: Context) {
+            try {
+                val intent = Intent(context, KeepAliveService::class.java)
+                context.stopService(intent)
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to stop service: ${e.message}")
+            }
         }
     }
 
@@ -41,15 +62,37 @@ class KeepAliveService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
+        try {
+            createNotificationChannel()
+            startForegroundCompat()
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error in onCreate startForegroundCompat", e)
+        }
+    }
+
+    private fun startForegroundCompat() {
+        val notification = buildNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // Android 14+
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "ACTION_UPDATE") {
-            val notification = buildNotification()
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.notify(NOTIFICATION_ID, notification)
+            try {
+                val notification = buildNotification()
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.notify(NOTIFICATION_ID, notification)
+            } catch (e: Throwable) {
+                Log.e(TAG, "Error updating notification", e)
+            }
         }
         return START_STICKY
     }

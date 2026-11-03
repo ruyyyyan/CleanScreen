@@ -1,16 +1,16 @@
 package com.ruyyyyan.cleanscreen
 
 import android.app.Application
-import com.ruyyyyan.cleanscreen.data.repository.InterceptRepository
-import com.ruyyyyan.cleanscreen.service.KeepAliveService
+import android.util.Log
 
 class CleanScreenApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        val repository = InterceptRepository.getInstance(this)
-        if (repository.isMasterEnabled) {
-            KeepAliveService.startService(this)
+        
+        // 全局未捕获异常守护，防止闪退
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e("CleanScreenApp", "Uncaught exception in thread ${thread.name}", throwable)
         }
     }
 }

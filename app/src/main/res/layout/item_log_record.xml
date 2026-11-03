@@ -25,7 +25,7 @@
                 android:id="@+id/tvLogTypeBadge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/ic_launcher_background"
+                android:background="@drawable/bg_badge_rounded"
                 android:backgroundTint="@color/accent_green_light"
                 android:paddingHorizontal="6dp"
                 android:paddingVertical="2dp"
