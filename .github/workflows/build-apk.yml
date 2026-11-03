@@ -1,0 +1,71 @@
+name: Build & Release CleanScreen APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build APK with Gradle
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Copy & Rename APK
+        run: |
+          mkdir -p release_output
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.0-iQOONeo11.apk
+          ls -lh release_output/
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CleanScreen-v1.0.0-iQOONeo11
+          path: release_output/CleanScreen-v1.0.0-iQOONeo11.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0
+          name: "清屏 CleanScreen v1.0.0 (适配 iQOO Neo 11 / OriginOS)"
+          body: |
+            ### 📱 清屏 (CleanScreen) v1.0.0 正式版发布
+
+            专为 **iQOO Neo 11 / vivo OriginOS** 与现代 Android 深度定制优化的开屏广告与误触跳转拦截工具。
+
+            #### ✨ 核心功能
+            - ⚡ **开屏广告智能跳过**：毫秒级自动匹配并点击“跳过/关闭”按钮，支持控件ID识别、坐标模拟手势点击。
+            - 🛡️ **误触跨应用跳转拦截**：检测开屏误触诱导唤起第三方购物/应用市场时，0.1秒内自动执行全局返回。
+            - 📊 **按 App 统计拦截数据**：实时统计今日拦截数、累计拦截数、各 App 拦截排行榜与流水日志。
+            - 🔋 **iQOO Neo 11 / OriginOS 深度保活**：针对 vivo 系统电池高耗电、自启动与多任务卡片锁定的专项适配。
+
+            #### 📥 安装与权限说明
+            1. 下载下方 `CleanScreen-v1.0.0-iQOONeo11.apk` 并在手机上安装。
+            2. **首次安装提示“受限设置”解除**：
+               进入【设置】->【应用】->【清屏】-> 点击右上角三个点 -> 选择【允许受限设置】。
+            3. 在软件内开启【无障碍服务】，并按照软件指引完成【自启动】与【允许后台高耗电】配置。
+          files: release_output/CleanScreen-v1.0.0-iQOONeo11.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

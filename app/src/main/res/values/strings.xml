@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">清屏</string>
+    <string name="accessibility_service_label">清屏 - 广告智能跳过服务</string>
+    <string name="accessibility_service_description">“清屏”利用无障碍技术为您自动识别并跳过其他应用的开屏广告，防止误触跳转。本服务仅在本地检索跳过按钮，绝不收集或上传任何个人数据与隐私内容。</string>
+    <string name="notification_channel_name">清屏运行守护</string>
+    <string name="notification_channel_desc">保持清屏在后台常驻运行，统计拦截次数与状态</string>
+    <string name="toast_skip_success">已自动跳过开屏广告</string>
+    <string name="toast_jump_prevented">已拦截误触跨应用跳转并快速返回</string>
+</resources>
