@@ -8,9 +8,16 @@ class CleanScreenApp : Application() {
     override fun onCreate() {
         super.onCreate()
         
-        // 全局未捕获异常守护，防止闪退
+        // 捕获异常记录日志，并委托给系统默认处理器以保证正常的系统崩溃与恢复流程
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            Log.e("CleanScreenApp", "Uncaught exception in thread ${thread.name}", throwable)
+            Log.e(
+                "CleanScreenApp",
+                "Uncaught exception in thread ${thread.name}",
+                throwable
+            )
+            previousHandler?.uncaughtException(thread, throwable)
         }
     }
 }
+

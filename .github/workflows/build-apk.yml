@@ -32,42 +32,39 @@ jobs:
       - name: Copy & Rename APK
         run: |
           mkdir -p release_output
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.4-Xiaomi-HyperOS.apk
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.4-iQOO-OriginOS.apk
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.4-Universal.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.5-Xiaomi-HyperOS.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.5-iQOO-OriginOS.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.5-Universal.apk
           ls -lh release_output/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CleanScreen-v1.0.4
+          name: CleanScreen-v1.0.5
           path: release_output/*.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.4
-          name: "清屏 CleanScreen v1.0.4 (适配小米 14/15 旗舰 HyperOS 与 iQOO Neo 11)"
+          tag_name: v1.0.5
+          name: "清屏 CleanScreen v1.0.5 (纯净无障碍架构 & 异常链路修复)"
           body: |
-            ### 📱 清屏 (CleanScreen) v1.0.4 小米澎湃OS & vivo双旗舰正式版
+            ### 📱 清屏 (CleanScreen) v1.0.5 纯净无障碍架构修复版
 
-            全面适配 **小米 14 / 14 Pro / 14 Ultra / 15 / 15 Pro / 15 Ultra (HyperOS 澎湃OS)** 与 **iQOO Neo 11 / vivo (OriginOS)**！
+            全面适配 **iQOO Neo 11 (OriginOS 5/6)** 与 **小米 14 / 15 旗舰 (HyperOS 1/2)**！
 
-            #### 🌟 核心新特性与优化
-            1. **小米 HyperOS 1 / HyperOS 2 深度适配**：
-               - 内置小米专用的后台保活通道，一键直达小米神隐模式将省电策略切换为【无限制】；
-               - 一键直达小米安全中心开启【自启动】与【应用关联启动】；
-               - 针对 HyperOS 10 秒安全警告倒计时与“受限设置”提供专属指引。
-            2. **智能设备识别**：
-               - 打开应用自动识别机型系统，动态呈现对应的系统保活设置引导卡片。
-            3. **精准时空窗口防误触**：
-               - 严格限定在应用启动前 3.5 秒内检索跳过按钮，进入应用内永久停止扫描，100% 杜绝误触。
-            4. **轻量防卡死引擎**：
-               - 极速响应，移除繁重视图监听，彻底解决系统无障碍自动关闭问题。
+            #### 🛠️ v1.0.5 核心技术重构与修复：
+            1. **剥离混合服务架构，重回纯净无障碍**：
+               - 彻底移除 `CleanScreenAccessibilityService` 上的 `foregroundServiceType="specialUse"` 声明；
+               - 移除未使用的前台服务权限，交由 Android 系统 `AccessibilityManagerService` 规范托管生命周期，消除 Android 14+ / OriginOS 6 绑定时的服务类型冲突。
+            2. **修复全局异常处理器缺陷**：
+               - 重构 `CleanScreenApp.kt` 异常捕获逻辑，在捕获日志后准确委派回系统默认 `UncaughtExceptionHandler`，避免由于吞噬异常导致 Binder 线程僵死或进程被系统强制剥离无障碍。
+            3. **精准呈现真实运行状态**：
+               - 主界面重构状态检查：明确区分「系统记录已启用」与「服务进程实际已连接」，若服务因权限受限或挂起未连接，提供精准修复引导与一键解除受限设置。
           files: |
-            release_output/CleanScreen-v1.0.4-Xiaomi-HyperOS.apk
-            release_output/CleanScreen-v1.0.4-iQOO-OriginOS.apk
-            release_output/CleanScreen-v1.0.4-Universal.apk
+            release_output/CleanScreen-v1.0.5-Xiaomi-HyperOS.apk
+            release_output/CleanScreen-v1.0.5-iQOO-OriginOS.apk
+            release_output/CleanScreen-v1.0.5-Universal.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

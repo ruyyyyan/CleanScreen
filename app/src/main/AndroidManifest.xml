@@ -5,8 +5,6 @@
     <!-- 基础与辅助服务权限 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -65,24 +63,19 @@
             android:exported="false"
             android:label="小米旗舰 HyperOS 保活指南" />
 
-        <!-- 核心无障碍服务 (直接支持前台通知保活，设置 stopWithTask=false 防任务清理杀停) -->
+        <!-- 核心无障碍服务 (由系统 AccessibilityManager 独立托管生命周期) -->
         <service
             android:name=".service.CleanScreenAccessibilityService"
             android:enabled="true"
             android:exported="true"
             android:label="@string/accessibility_service_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:stopWithTask="false"
-            android:foregroundServiceType="specialUse">
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Ad interception and accessibility guardian" />
         </service>
 
         <!-- 开机自启广播接收器 -->
