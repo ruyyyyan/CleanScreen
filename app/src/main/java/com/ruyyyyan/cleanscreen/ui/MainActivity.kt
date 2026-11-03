@@ -45,6 +45,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val stateChangeListener = {
+        runOnUiThread {
+            updateDashboard()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        ServiceStateHolder.addListener(stateChangeListener)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        ServiceStateHolder.removeListener(stateChangeListener)
+    }
+
     override fun onResume() {
         super.onResume()
         try {
@@ -132,6 +148,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.cardDiagnostic.setOnClickListener {
+            startActivity(Intent(this, DiagnosticActivity::class.java))
+        }
+
         binding.cardAppList.setOnClickListener {
             startActivity(Intent(this, AppListActivity::class.java))
         }
@@ -150,35 +170,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleAccessibilityChipClick() {
-        val isConfigured = PermissionUtils.isAccessibilityServiceEnabled(this)
-        val isRunning = PermissionUtils.isAccessibilityServiceRunning(this)
+        val state = PermissionUtils.getAccessibilityServiceState(this)
 
-        if (isConfigured && !isRunning) {
-            AlertDialog.Builder(this)
-                .setTitle("⚠️ 无障碍服务已授权但未成功连接")
-                .setMessage(
-                    "系统设置显示已开启，但无障碍服务未成功绑定运行。\n\n" +
-                    "可能原因与解决步骤：\n" +
-                    "1. 【受限制的设置】：Android 13+ 对浏览器或本地安装的 APK 限制敏感权限。请长按本软件图标或前往【应用信息】，点击右上角三点菜单，选择【允许受限制的设置】。\n" +
-                    "2. 【服务挂起】：请前往系统设置将清屏无障碍开关【关闭后再重新开启一次】。"
-                )
-                .setPositiveButton("前往无障碍重新开启") { _, _ ->
-                    PermissionUtils.openAccessibilitySettings(this)
+        when (state) {
+            AccessibilityServiceState.CONFIGURED_NOT_BOUND,
+            AccessibilityServiceState.CONNECTION_LOST,
+            AccessibilityServiceState.UNKNOWN -> {
+                AlertDialog.Builder(this)
+                    .setTitle("⚠️ 无障碍服务未正常就绪 (${state.name})")
+                    .setMessage(
+                        "系统检测到无障碍服务未处于正常活跃连接状态。\n\n" +
+                        "推荐解决方案：\n" +
+                        "1. 进入【无障碍实时深度诊断】排查 Android 16 受限制设置或底层原因；\n" +
+                        "2. 前往系统无障碍设置，将清屏开关【关闭后再重新开启一次】。"
+                    )
+                    .setPositiveButton("进入实时深度诊断") { _, _ ->
+                        startActivity(Intent(this, DiagnosticActivity::class.java))
+                    }
+                    .setNeutralButton("前往系统设置重新开启") { _, _ ->
+                        PermissionUtils.openAccessibilitySettings(this)
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+                return
+            }
+            AccessibilityServiceState.NOT_CONFIGURED,
+            AccessibilityServiceState.RUNNING -> {
+                if (XiaomiOptimizer.isXiaomiOrRedmi()) {
+                    XiaomiOptimizer.showHyperOSWarningTip(this)
+                } else {
+                    VivoOptimizer.showRestrictedSettingsTip(this)
                 }
-                .setNeutralButton("前往解除受限制设置") { _, _ ->
-                    PermissionUtils.openAppDetailsSettings(this)
-                }
-                .setNegativeButton("取消", null)
-                .show()
-            return
+                PermissionUtils.openAccessibilitySettings(this)
+            }
         }
-
-        if (XiaomiOptimizer.isXiaomiOrRedmi()) {
-            XiaomiOptimizer.showHyperOSWarningTip(this)
-        } else {
-            VivoOptimizer.showRestrictedSettingsTip(this)
-        }
-        PermissionUtils.openAccessibilitySettings(this)
     }
 
     private fun updateDashboard() {
@@ -189,31 +214,59 @@ class MainActivity : AppCompatActivity() {
                 binding.switchMaster.isChecked = isMasterOn
             }
 
-            val isAccessibilityConfigured = PermissionUtils.isAccessibilityServiceEnabled(this)
-            val isAccessibilityRunning = PermissionUtils.isAccessibilityServiceRunning(this)
+            val state = PermissionUtils.getAccessibilityServiceState(this)
             val isBatteryIgnored = PermissionUtils.isIgnoringBatteryOptimizations(this)
 
-            if (isAccessibilityConfigured && isAccessibilityRunning && isMasterOn) {
-                binding.tvStatusTitle.text = "清屏正在持续守护"
-                binding.tvStatusSubtitle.text = "开屏广告跳过与误触防跳转运行正常"
-                binding.ivShieldIcon.setImageResource(R.drawable.ic_shield_check)
-                binding.chipAccessibility.text = "无障碍: 运行正常"
-                binding.chipAccessibility.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#E8FFEA"))
-                binding.chipAccessibility.setTextColor(Color.parseColor("#059669"))
-            } else if (isAccessibilityConfigured && !isAccessibilityRunning) {
-                binding.tvStatusTitle.text = "无障碍服务异常断开"
-                binding.tvStatusSubtitle.text = "系统已授权但服务未连接，点击修复或检查受限设置"
-                binding.ivShieldIcon.setImageResource(R.drawable.ic_warning_circle)
-                binding.chipAccessibility.text = "无障碍: 授权未连接"
-                binding.chipAccessibility.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FFF7E8"))
-                binding.chipAccessibility.setTextColor(Color.parseColor("#D97706"))
-            } else {
-                binding.tvStatusTitle.text = if (!isMasterOn) "清屏已暂停" else "无障碍服务未开启"
-                binding.tvStatusSubtitle.text = if (!isMasterOn) "点击右侧开关重新开启守护" else "点击下方或前往设置开启清屏服务"
-                binding.ivShieldIcon.setImageResource(R.drawable.ic_warning_circle)
-                binding.chipAccessibility.text = "无障碍: 点击开启"
-                binding.chipAccessibility.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FFF7E8"))
-                binding.chipAccessibility.setTextColor(Color.parseColor("#D97706"))
+            when (state) {
+                AccessibilityServiceState.RUNNING -> {
+                    if (isMasterOn) {
+                        binding.tvStatusTitle.text = "清屏正在持续守护"
+                        binding.tvStatusSubtitle.text = "开屏广告跳过与误触防跳转运行正常"
+                        binding.ivShieldIcon.setImageResource(R.drawable.ic_shield_check)
+                        binding.chipAccessibility.text = "无障碍: 正在守护"
+                        binding.chipAccessibility.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#E8FFEA"))
+                        binding.chipAccessibility.setTextColor(Color.parseColor("#059669"))
+                    } else {
+                        binding.tvStatusTitle.text = "清屏已暂停"
+                        binding.tvStatusSubtitle.text = "点击右侧总开关重新开启守护"
+                        binding.ivShieldIcon.setImageResource(R.drawable.ic_warning_circle)
+                        binding.chipAccessibility.text = "无障碍: 已暂停"
+                        binding.chipAccessibility.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FFF7E8"))
+                        binding.chipAccessibility.setTextColor(Color.parseColor("#D97706"))
+                    }
+                }
+                AccessibilityServiceState.CONFIGURED_NOT_BOUND -> {
+                    binding.tvStatusTitle.text = "无障碍已授权但未连接"
+                    binding.tvStatusSubtitle.text = "系统已开启但服务未连接，点击进入深度诊断"
+                    binding.ivShieldIcon.setImageResource(R.drawable.ic_warning_circle)
+                    binding.chipAccessibility.text = "无障碍: 授权未连接"
+                    binding.chipAccessibility.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FFF7E8"))
+                    binding.chipAccessibility.setTextColor(Color.parseColor("#D97706"))
+                }
+                AccessibilityServiceState.CONNECTION_LOST -> {
+                    binding.tvStatusTitle.text = "无障碍连接已中断"
+                    binding.tvStatusSubtitle.text = "服务曾运行但被系统切断，点击诊断与恢复"
+                    binding.ivShieldIcon.setImageResource(R.drawable.ic_warning_circle)
+                    binding.chipAccessibility.text = "无障碍: 连接丢失"
+                    binding.chipAccessibility.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FEE2E2"))
+                    binding.chipAccessibility.setTextColor(Color.parseColor("#DC2626"))
+                }
+                AccessibilityServiceState.NOT_CONFIGURED -> {
+                    binding.tvStatusTitle.text = if (!isMasterOn) "清屏已暂停" else "无障碍服务未开启"
+                    binding.tvStatusSubtitle.text = if (!isMasterOn) "点击右侧开关重新开启守护" else "点击下方或前往设置开启清屏服务"
+                    binding.ivShieldIcon.setImageResource(R.drawable.ic_warning_circle)
+                    binding.chipAccessibility.text = "无障碍: 点击开启"
+                    binding.chipAccessibility.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FFF7E8"))
+                    binding.chipAccessibility.setTextColor(Color.parseColor("#D97706"))
+                }
+                AccessibilityServiceState.UNKNOWN -> {
+                    binding.tvStatusTitle.text = "无障碍状态未知"
+                    binding.tvStatusSubtitle.text = "无法确定服务状态，点击进入深度诊断"
+                    binding.ivShieldIcon.setImageResource(R.drawable.ic_warning_circle)
+                    binding.chipAccessibility.text = "无障碍: 状态未知"
+                    binding.chipAccessibility.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#F3F4F6"))
+                    binding.chipAccessibility.setTextColor(Color.parseColor("#6B7280"))
+                }
             }
 
             if (isBatteryIgnored) {

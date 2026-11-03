@@ -2,16 +2,40 @@ package com.ruyyyyan.cleanscreen.data.repository
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import com.ruyyyyan.cleanscreen.data.db.DatabaseHelper
 import com.ruyyyyan.cleanscreen.data.model.AppInfo
 import com.ruyyyyan.cleanscreen.data.model.InterceptRecord
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 class InterceptRepository private constructor(private val context: Context) {
 
     private val dbHelper = DatabaseHelper(context)
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    // Dedicated single-thread executor to keep all DB writes off the UI/Binder thread
+    private val dbExecutor = Executors.newSingleThreadExecutor()
+
+    // High-performance in-memory cache to prevent disk I/O on every accessibility event
+    private val appEnabledCache = ConcurrentHashMap<String, Boolean>()
+
+    init {
+        // Asynchronously warm up the appEnabledCache from database
+        dbExecutor.execute {
+            try {
+                val appInfos = dbHelper.getAllAppInfos()
+                for (app in appInfos) {
+                    appEnabledCache[app.packageName] = app.isEnabled
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Cache warmup error: ${e.message}")
+            }
+        }
+    }
+
     companion object {
+        private const val TAG = "InterceptRepository"
         private const val PREFS_NAME = "cleanscreen_settings"
         private const val KEY_MASTER_ENABLED = "key_master_enabled"
         private const val KEY_SHOW_TOAST = "key_show_toast"
@@ -72,39 +96,101 @@ class InterceptRepository private constructor(private val context: Context) {
         prefs.edit().putStringSet(KEY_CUSTOM_KEYWORDS, current).apply()
     }
 
+    /**
+     * Persists intercept log asynchronously without blocking caller thread.
+     */
     fun recordIntercept(record: InterceptRecord) {
-        dbHelper.addInterceptLog(record)
+        dbExecutor.execute {
+            try {
+                dbHelper.addInterceptLog(record)
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to persist intercept record", e)
+            }
+        }
     }
 
+    /**
+     * Checks if protection is enabled for a given package with zero-latency in-memory cache.
+     */
     fun isAppEnabled(packageName: String): Boolean {
-        return dbHelper.isAppEnabled(packageName)
+        val cached = appEnabledCache[packageName]
+        if (cached != null) {
+            return cached
+        }
+
+        // Cache miss: default to enabled and query in background to update cache
+        dbExecutor.execute {
+            try {
+                val enabled = dbHelper.isAppEnabled(packageName)
+                appEnabledCache[packageName] = enabled
+            } catch (e: Throwable) {
+                // Keep default true on error
+            }
+        }
+        return true
     }
 
+    /**
+     * Updates app rule in memory and schedules asynchronous disk write.
+     */
     fun setAppEnabled(packageName: String, appName: String, enabled: Boolean) {
-        dbHelper.setAppEnabled(packageName, appName, enabled)
+        appEnabledCache[packageName] = enabled
+        dbExecutor.execute {
+            try {
+                dbHelper.setAppEnabled(packageName, appName, enabled)
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to update app rule in DB", e)
+            }
+        }
     }
 
     fun getTodayInterceptCount(): Int {
-        return dbHelper.getTodayInterceptCount()
+        return try {
+            dbHelper.getTodayInterceptCount()
+        } catch (e: Throwable) {
+            0
+        }
     }
 
     fun getTotalInterceptCount(): Int {
-        return dbHelper.getTotalInterceptCount()
+        return try {
+            dbHelper.getTotalInterceptCount()
+        } catch (e: Throwable) {
+            0
+        }
     }
 
     fun getProtectedAppCount(): Int {
-        return dbHelper.getProtectedAppCount()
+        return try {
+            dbHelper.getProtectedAppCount()
+        } catch (e: Throwable) {
+            0
+        }
     }
 
     fun getAllAppInfos(): List<AppInfo> {
-        return dbHelper.getAllAppInfos()
+        return try {
+            dbHelper.getAllAppInfos()
+        } catch (e: Throwable) {
+            emptyList()
+        }
     }
 
     fun getRecentLogs(limit: Int = 100): List<InterceptRecord> {
-        return dbHelper.getRecentLogs(limit)
+        return try {
+            dbHelper.getRecentLogs(limit)
+        } catch (e: Throwable) {
+            emptyList()
+        }
     }
 
     fun clearAllLogs() {
-        dbHelper.clearAllLogs()
+        dbExecutor.execute {
+            try {
+                dbHelper.clearAllLogs()
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to clear logs", e)
+            }
+        }
     }
 }

@@ -63,6 +63,12 @@
             android:exported="false"
             android:label="小米旗舰 HyperOS 保活指南" />
 
+        <!-- 无障碍实时深度诊断界面 -->
+        <activity
+            android:name=".ui.DiagnosticActivity"
+            android:exported="false"
+            android:label="无障碍实时深度诊断" />
+
         <!-- 核心无障碍服务 (由系统 AccessibilityManager 独立托管生命周期) -->
         <service
             android:name=".service.CleanScreenAccessibilityService"

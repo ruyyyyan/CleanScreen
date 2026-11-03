@@ -32,39 +32,44 @@ jobs:
       - name: Copy & Rename APK
         run: |
           mkdir -p release_output
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.5-Xiaomi-HyperOS.apk
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.5-iQOO-OriginOS.apk
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.5-Universal.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.6-Xiaomi-HyperOS.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.6-iQOO-OriginOS.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.6-Universal.apk
           ls -lh release_output/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CleanScreen-v1.0.5
+          name: CleanScreen-v1.0.6
           path: release_output/*.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.5
-          name: "清屏 CleanScreen v1.0.5 (纯净无障碍架构 & 异常链路修复)"
+          tag_name: v1.0.6
+          name: "清屏 CleanScreen v1.0.6 (深度生命周期监测 & Android 16 OriginOS 6 诊断排查版)"
           body: |
-            ### 📱 清屏 (CleanScreen) v1.0.5 纯净无障碍架构修复版
+            ### 📱 清屏 (CleanScreen) v1.0.6 深度诊断与生命周期重构版
 
-            全面适配 **iQOO Neo 11 (OriginOS 5/6)** 与 **小米 14 / 15 旗舰 (HyperOS 1/2)**！
+            专为 **iQOO Neo 11 (OriginOS 6 / Android 16)** 与 **小米 14 / 15 / 16 (HyperOS 1/2)** 打造！
 
-            #### 🛠️ v1.0.5 核心技术重构与修复：
-            1. **剥离混合服务架构，重回纯净无障碍**：
-               - 彻底移除 `CleanScreenAccessibilityService` 上的 `foregroundServiceType="specialUse"` 声明；
-               - 移除未使用的前台服务权限，交由 Android 系统 `AccessibilityManagerService` 规范托管生命周期，消除 Android 14+ / OriginOS 6 绑定时的服务类型冲突。
-            2. **修复全局异常处理器缺陷**：
-               - 重构 `CleanScreenApp.kt` 异常捕获逻辑，在捕获日志后准确委派回系统默认 `UncaughtExceptionHandler`，避免由于吞噬异常导致 Binder 线程僵死或进程被系统强制剥离无障碍。
-            3. **精准呈现真实运行状态**：
-               - 主界面重构状态检查：明确区分「系统记录已启用」与「服务进程实际已连接」，若服务因权限受限或挂起未连接，提供精准修复引导与一键解除受限设置。
+            #### 🛠️ v1.0.6 核心技术升级与问题修复：
+            1. **新增【无障碍实时深度诊断】控制台**：
+               - 实时诊断 Android 16 敏感权限受限制设置 (Restricted Settings / OP_ACCESS_RESTRICTED_SETTINGS)；
+               - 明确区分五大核心运行状态（NOT_CONFIGURED / CONFIGURED_NOT_BOUND / RUNNING / CONNECTION_LOST / UNKNOWN）；
+               - 实时监控 AMS 绑定、全局无障碍状态与内存服务实例，杜绝虚假“已开启”假象。
+            2. **补全完整无障碍生命周期链路**：
+               - 规范重构 `onCreate()`, `onServiceConnected()`, `onUnbind()`, `onDestroy()`, `onInterrupt()`；
+               - 在 `onServiceConnected()` 中通过代码动态强化注入 `serviceInfo`，消除不同厂商定制 ROM 解析 XML 元数据的偏差。
+            3. **无障碍事件通道彻底异步与零耗时优化**：
+               - 剥离无障碍事件响应与数据库的同步读写，数据库写操作迁移至独立单线程后台执行池；
+               - 引入应用规则内存缓存，彻底杜绝主线程 SQLite 查询导致的 Binder 阻塞与系统看门狗杀停。
+            4. **全链路生命周期流转记录**：
+               - 内置环形缓冲区记录最近 30 条详细生命周期事件与毫秒级时间戳、PID，支持一键复制完整诊断报告。
           files: |
-            release_output/CleanScreen-v1.0.5-Xiaomi-HyperOS.apk
-            release_output/CleanScreen-v1.0.5-iQOO-OriginOS.apk
-            release_output/CleanScreen-v1.0.5-Universal.apk
+            release_output/CleanScreen-v1.0.6-Xiaomi-HyperOS.apk
+            release_output/CleanScreen-v1.0.6-iQOO-OriginOS.apk
+            release_output/CleanScreen-v1.0.6-Universal.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
