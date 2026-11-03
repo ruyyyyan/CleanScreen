@@ -123,11 +123,7 @@ object PermissionUtils {
             val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
                 ?: return RestrictedSettingsStatus.UNKNOWN
 
-            val opStr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                AppOpsManager.OPSTR_ACCESS_RESTRICTED_SETTINGS
-            } else {
-                "android:access_restricted_settings"
-            }
+            val opStr = "android:access_restricted_settings"
 
             val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 appOps.unsafeCheckOpNoThrow(opStr, Process.myUid(), context.packageName)
