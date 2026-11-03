@@ -59,6 +59,12 @@
             android:exported="false"
             android:label="iQOO Neo 11 保活指南" />
 
+        <!-- 小米 14/15 旗舰 HyperOS 专属保活指引 -->
+        <activity
+            android:name=".ui.XiaomiGuideActivity"
+            android:exported="false"
+            android:label="小米旗舰 HyperOS 保活指南" />
+
         <!-- 核心无障碍服务 (直接支持前台通知保活，设置 stopWithTask=false 防任务清理杀停) -->
         <service
             android:name=".service.CleanScreenAccessibilityService"

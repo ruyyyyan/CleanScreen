@@ -32,35 +32,42 @@ jobs:
       - name: Copy & Rename APK
         run: |
           mkdir -p release_output
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.3-iQOONeo11.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.4-Xiaomi-HyperOS.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.4-iQOO-OriginOS.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.4-Universal.apk
           ls -lh release_output/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CleanScreen-v1.0.3-iQOONeo11
-          path: release_output/CleanScreen-v1.0.3-iQOONeo11.apk
+          name: CleanScreen-v1.0.4
+          path: release_output/*.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.3
-          name: "清屏 CleanScreen v1.0.3 (彻底解决误触与无障碍被关问题)"
+          tag_name: v1.0.4
+          name: "清屏 CleanScreen v1.0.4 (适配小米 14/15 旗舰 HyperOS 与 iQOO Neo 11)"
           body: |
-            ### 📱 清屏 (CleanScreen) v1.0.3 关键精度与保活修复版
+            ### 📱 清屏 (CleanScreen) v1.0.4 小米澎湃OS & vivo双旗舰正式版
 
-            针对用户反馈的 **“无障碍被系统自动关闭”** 以及 **“误触其他应用按钮”** 进行的彻底重构与修复：
+            全面适配 **小米 14 / 14 Pro / 14 Ultra / 15 / 15 Pro / 15 Ultra (HyperOS 澎湃OS)** 与 **iQOO Neo 11 / vivo (OriginOS)**！
 
-            #### 🛠️ 关键修复内容
-            1. **彻底解决误触其他应用按钮**：
-               - **废除盲目右上角盲点机制**：彻底删除了盲目探测右上角节点的逻辑（彻底解决误触微信右上角“+”、其他 App 搜索或菜单按钮的问题）。
-               - **严格限制扫描时空窗口**：仅在 App 冷启动的前 3.5 秒内才允许检索开屏广告。进入 App 内部后，绝对不再触发任何模拟点击！
-               - **严格跳过关键词匹配**：文字长度严格限制在 8 字以内，并精确校验“跳过/关闭广告/Skip”正则。
-               - **坐标合法性双重验证**：跳过按钮必须位于屏幕顶部 25% 或底部 15% 边缘，杜绝点击正文中央。
-            2. **彻底解决无障碍被 OriginOS 自动关闭**：
-               - **大幅减轻无障碍系统负荷**：事件监听仅保留 `TYPE_WINDOW_STATE_CHANGED`，事件超时设定为 100ms，移除臃肿的非重要视图检索标志，彻底杜绝 IPC 阻塞导致的系统强制关闭无障碍服务。
-               - **优化前台守护与 stopWithTask=false**：防止多任务清理时被系统杀死。
-          files: release_output/CleanScreen-v1.0.3-iQOONeo11.apk
+            #### 🌟 核心新特性与优化
+            1. **小米 HyperOS 1 / HyperOS 2 深度适配**：
+               - 内置小米专用的后台保活通道，一键直达小米神隐模式将省电策略切换为【无限制】；
+               - 一键直达小米安全中心开启【自启动】与【应用关联启动】；
+               - 针对 HyperOS 10 秒安全警告倒计时与“受限设置”提供专属指引。
+            2. **智能设备识别**：
+               - 打开应用自动识别机型系统，动态呈现对应的系统保活设置引导卡片。
+            3. **精准时空窗口防误触**：
+               - 严格限定在应用启动前 3.5 秒内检索跳过按钮，进入应用内永久停止扫描，100% 杜绝误触。
+            4. **轻量防卡死引擎**：
+               - 极速响应，移除繁重视图监听，彻底解决系统无障碍自动关闭问题。
+          files: |
+            release_output/CleanScreen-v1.0.4-Xiaomi-HyperOS.apk
+            release_output/CleanScreen-v1.0.4-iQOO-OriginOS.apk
+            release_output/CleanScreen-v1.0.4-Universal.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

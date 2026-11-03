@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.ruyyyyan.cleanscreen.R
@@ -17,6 +18,7 @@ import com.ruyyyyan.cleanscreen.databinding.ActivityMainBinding
 import com.ruyyyyan.cleanscreen.service.CleanScreenAccessibilityService
 import com.ruyyyyan.cleanscreen.utils.PermissionUtils
 import com.ruyyyyan.cleanscreen.utils.VivoOptimizer
+import com.ruyyyyan.cleanscreen.utils.XiaomiOptimizer
 
 class MainActivity : AppCompatActivity() {
 
@@ -35,6 +37,7 @@ class MainActivity : AppCompatActivity() {
             binding = ActivityMainBinding.inflate(layoutInflater)
             setContentView(binding.root)
 
+            setupBrandGuideBanner()
             setupListeners()
             checkAndRequestNotificationPermission()
         } catch (e: Throwable) {
@@ -63,6 +66,46 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupBrandGuideBanner() {
+        val isXiaomi = XiaomiOptimizer.isXiaomiOrRedmi()
+        val isVivo = VivoOptimizer.isVivoOrIqoo()
+
+        if (isXiaomi) {
+            binding.tvBrandGuideTitle.text = "小米 14 / 15 旗舰 (HyperOS) 专属保活配置"
+            binding.tvBrandGuideSubtitle.text = "配置自启动与【无限制】省电策略，防止后台被杀"
+            binding.cardBrandGuide.setOnClickListener {
+                startActivity(Intent(this, XiaomiGuideActivity::class.java))
+            }
+        } else if (isVivo) {
+            binding.tvBrandGuideTitle.text = "iQOO Neo 11 / OriginOS 深度保活配置"
+            binding.tvBrandGuideSubtitle.text = "配置自启动与允许后台高耗电，防止无障碍被关"
+            binding.cardBrandGuide.setOnClickListener {
+                startActivity(Intent(this, VivoGuideActivity::class.java))
+            }
+        } else {
+            binding.tvBrandGuideTitle.text = "小米 / iQOO 旗舰深度保活配置"
+            binding.tvBrandGuideSubtitle.text = "支持小米 HyperOS 与 vivo OriginOS 专属保活指引"
+            binding.cardBrandGuide.setOnClickListener {
+                showBrandChoiceDialog()
+            }
+        }
+    }
+
+    private fun showBrandChoiceDialog() {
+        val options = arrayOf("小米旗舰机 (HyperOS 澎湃OS) 保活指南", "iQOO / vivo (OriginOS) 保活指南")
+        AlertDialog.Builder(this)
+            .setTitle("请选择您的手机系统")
+            .setItems(options) { _, which ->
+                if (which == 0) {
+                    startActivity(Intent(this, XiaomiGuideActivity::class.java))
+                } else {
+                    startActivity(Intent(this, VivoGuideActivity::class.java))
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
     private fun setupListeners() {
         binding.switchMaster.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingUi) return@setOnCheckedChangeListener
@@ -76,20 +119,22 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.chipAccessibility.setOnClickListener {
+            if (XiaomiOptimizer.isXiaomiOrRedmi()) {
+                XiaomiOptimizer.showHyperOSWarningTip(this)
+            } else {
+                VivoOptimizer.showRestrictedSettingsTip(this)
+            }
             PermissionUtils.openAccessibilitySettings(this)
-            VivoOptimizer.showRestrictedSettingsTip(this)
         }
 
         binding.chipBattery.setOnClickListener {
-            if (VivoOptimizer.isVivoOrIqoo()) {
+            if (XiaomiOptimizer.isXiaomiOrRedmi()) {
+                XiaomiOptimizer.openBatterySaverSettings(this)
+            } else if (VivoOptimizer.isVivoOrIqoo()) {
                 VivoOptimizer.openBackgroundPowerSettings(this)
             } else {
                 PermissionUtils.requestIgnoreBatteryOptimization(this)
             }
-        }
-
-        binding.cardVivoGuide.setOnClickListener {
-            startActivity(Intent(this, VivoGuideActivity::class.java))
         }
 
         binding.cardAppList.setOnClickListener {
@@ -137,11 +182,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (isBatteryIgnored) {
-                binding.chipBattery.text = "电池优化: 已忽略"
+                binding.chipBattery.text = "省电策略: 已优化"
                 binding.chipBattery.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#E8FFEA"))
                 binding.chipBattery.setTextColor(Color.parseColor("#059669"))
             } else {
-                binding.chipBattery.text = "电池优化: 需配置"
+                binding.chipBattery.text = "省电策略: 需配置"
                 binding.chipBattery.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#E8F3FF"))
                 binding.chipBattery.setTextColor(Color.parseColor("#0E78F9"))
             }

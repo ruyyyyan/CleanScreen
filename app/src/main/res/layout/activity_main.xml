@@ -159,9 +159,9 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- iQOO Neo 11 / OriginOS 专属保活横幅 -->
+            <!-- 专属品牌机型保活横幅 (自动适配小米 HyperOS 与 vivo OriginOS) -->
             <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardVivoGuide"
+                android:id="@+id/cardBrandGuide"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="14dp"
@@ -193,14 +193,16 @@
                         android:orientation="vertical">
 
                         <TextView
+                            android:id="@+id/tvBrandGuideTitle"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="iQOO Neo 11 / OriginOS 深度保活配置"
+                            android:text="旗舰机专属深度保活配置"
                             android:textColor="@color/primary_variant"
                             android:textSize="14sp"
                             android:textStyle="bold" />
 
                         <TextView
+                            android:id="@+id/tvBrandGuideSubtitle"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"

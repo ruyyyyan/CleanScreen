@@ -1,5 +1,6 @@
 package com.ruyyyyan.cleanscreen.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.Toast
@@ -7,7 +8,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.ruyyyyan.cleanscreen.data.repository.InterceptRepository
 import com.ruyyyyan.cleanscreen.databinding.ActivitySettingsBinding
-import com.ruyyyyan.cleanscreen.utils.PermissionUtils
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -26,18 +26,8 @@ class SettingsActivity : AppCompatActivity() {
         updateKeywordSummary()
     }
 
-    override fun onResume() {
-        super.onResume()
-        // If user came back from overlay permission settings, check permission
-        if (repository.isShieldOverlayEnabled && !PermissionUtils.isOverlayPermissionGranted(this)) {
-            repository.isShieldOverlayEnabled = false
-            binding.switchShieldOverlay.isChecked = false
-        }
-    }
-
     private fun setupSwitchStates() {
         binding.switchMisclick.isChecked = repository.isPreventMisclickJumpEnabled
-        binding.switchShieldOverlay.isChecked = repository.isShieldOverlayEnabled && PermissionUtils.isOverlayPermissionGranted(this)
         binding.switchFastMode.isChecked = repository.isFastModeEnabled
         binding.switchToast.isChecked = repository.isShowToastEnabled
         binding.switchVibrate.isChecked = repository.isVibrateEnabled
@@ -46,20 +36,6 @@ class SettingsActivity : AppCompatActivity() {
     private fun setupListeners() {
         binding.switchMisclick.setOnCheckedChangeListener { _, isChecked ->
             repository.isPreventMisclickJumpEnabled = isChecked
-        }
-
-        binding.switchShieldOverlay.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                if (!PermissionUtils.isOverlayPermissionGranted(this)) {
-                    Toast.makeText(this, "需要授予悬浮窗权限以启用开屏安全遮罩", Toast.LENGTH_LONG).show()
-                    PermissionUtils.requestOverlayPermission(this)
-                    repository.isShieldOverlayEnabled = true
-                } else {
-                    repository.isShieldOverlayEnabled = true
-                }
-            } else {
-                repository.isShieldOverlayEnabled = false
-            }
         }
 
         binding.switchFastMode.setOnCheckedChangeListener { _, isChecked ->
@@ -72,6 +48,14 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.switchVibrate.setOnCheckedChangeListener { _, isChecked ->
             repository.isVibrateEnabled = isChecked
+        }
+
+        binding.cardXiaomiGuide.setOnClickListener {
+            startActivity(Intent(this, XiaomiGuideActivity::class.java))
+        }
+
+        binding.cardVivoGuide.setOnClickListener {
+            startActivity(Intent(this, VivoGuideActivity::class.java))
         }
 
         binding.cardCustomKeywords.setOnClickListener {
