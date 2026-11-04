@@ -69,6 +69,12 @@
             android:exported="false"
             android:label="无障碍实时深度诊断" />
 
+        <!-- 广告跳过规则中心 (GKD 规则架构) -->
+        <activity
+            android:name=".ui.RulesActivity"
+            android:exported="false"
+            android:label="广告跳过规则中心" />
+
         <!-- 核心无障碍服务 (由系统 AccessibilityManager 独立托管生命周期) -->
         <service
             android:name=".service.CleanScreenAccessibilityService"

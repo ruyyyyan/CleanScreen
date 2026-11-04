@@ -32,48 +32,49 @@ jobs:
       - name: Copy & Rename APK
         run: |
           mkdir -p release_output
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.6-Xiaomi-HyperOS.apk
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.6-iQOO-OriginOS.apk
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.6-Universal.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.7-Xiaomi-HyperOS.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.7-iQOO-OriginOS.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.7-Universal.apk
           ls -lh release_output/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CleanScreen-v1.0.6
+          name: CleanScreen-v1.0.7
           path: release_output/*.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.6
-          name: "清屏 CleanScreen v1.0.6 (深度生命周期监测 & Android 16 OriginOS 6 诊断排查版)"
+          tag_name: v1.0.7
+          name: "清屏 CleanScreen v1.0.7 (融合 GKD 规则引擎 & 李跳跳零网络权限架构版)"
           body: |
-            ### 📱 清屏 (CleanScreen) v1.0.6 深度诊断与生命周期重构版
+            ### 🚀 清屏 (CleanScreen) v1.0.7 重磅重构发布
 
-            专为 **iQOO Neo 11 (OriginOS 6 / Android 16)** 与 **小米 14 / 15 / 16 (HyperOS 1/2)** 打造！
+            融合开源标杆 **李跳跳** 的极致纯净隐私理念与 **GKD** 的精准规则引擎架构，专为 **iQOO Neo 11 (OriginOS 6 / Android 16)** 与 **小米 14 / 15 / 16 (HyperOS 1/2)** 等主流系统优化！
 
-            #### 🛠️ v1.0.6 核心技术升级与问题修复：
-            1. **新增【无障碍实时深度诊断】控制台**：
-               - 实时诊断 Android 16 敏感权限受限制设置 (Restricted Settings / OP_ACCESS_RESTRICTED_SETTINGS)；
-               - 明确区分五大核心运行状态（NOT_CONFIGURED / CONFIGURED_NOT_BOUND / RUNNING / CONNECTION_LOST / UNKNOWN）；
-               - 实时监控 AMS 绑定、全局无障碍状态与内存服务实例，杜绝虚假“已开启”假象。
-            2. **补全完整无障碍生命周期链路**：
-               - 规范重构 `onCreate()`, `onServiceConnected()`, `onUnbind()`, `onDestroy()`, `onInterrupt()`；
-               - 在 `onServiceConnected()` 中通过代码动态强化注入 `serviceInfo`，消除不同厂商定制 ROM 解析 XML 元数据的偏差。
-            3. **无障碍事件通道彻底异步与零耗时优化**：
-               - 剥离无障碍事件响应与数据库的同步读写，数据库写操作迁移至独立单线程后台执行池；
-               - 引入应用规则内存缓存，彻底杜绝主线程 SQLite 查询导致的 Binder 阻塞与系统看门狗杀停。
-            4. **全链路生命周期流转记录**：
-               - 内置环形缓冲区记录最近 30 条详细生命周期事件与毫秒级时间戳、PID，支持一键复制完整诊断报告。
+            #### ✨ v1.0.7 核心特性与架构升级：
+            1. **【李跳跳式】零网络权限·100% 离线运行**：
+               - 清屏代码中未申请任何 `INTERNET` 网络权限，无任何数据上传逻辑，完全本地离线运行，彻底杜绝隐私与无障碍敏感权限安全顾虑。
+            2. **【GKD 式】高性能规则引擎与双轨跳过机制**：
+               - **Activity 级作用域隔离**：精准识别前台开屏 Activity，离开开屏界面后规则立即静默，杜绝误触微信聊天界面加号、知乎/贴吧等内页操作；
+               - **控件 View ID + 正则 + 屏幕坐标三维校验**：通过 View ID 与屏幕边界（顶部 25% / 底部 15%）限制跳过热区，毫秒级精准命中广告；
+               - **双轨极速扫描**：首阶段 GKD 规则库 2ms 极速检索，第二阶段通用启发式正则兜底，兼顾极致精准与全网未知 App 适配。
+            3. **内置 35+ 款高频主流应用开箱即用规则**：
+               - 内置微信、微博、知乎、哔哩哔哩、网易云音乐、淘宝、京东、拼多多、酷安、贴吧、高德地图、美团、抖音、快手等主流 App 的精准跳过规则。
+            4. **全新【广告跳过规则中心】(Rule Hub)**：
+               - 支持规则列表浏览与按应用名/包名实时模糊搜索；
+               - 支持单条规则一键启用/禁用；
+               - 支持自定义规则 JSON 与便捷文本格式导入/导出，完全兼容用户自定义规则扩充。
+            5. **延续 Android 16 与 OriginOS 6 深度保活机制**：
+               - 包含 Restricted Settings 检测、AMS 状态深度诊断与全链路生命周期监控控制台。
           files: |
-            release_output/CleanScreen-v1.0.6-Xiaomi-HyperOS.apk
-            release_output/CleanScreen-v1.0.6-iQOO-OriginOS.apk
-            release_output/CleanScreen-v1.0.6-Universal.apk
+            release_output/CleanScreen-v1.0.7-Xiaomi-HyperOS.apk
+            release_output/CleanScreen-v1.0.7-iQOO-OriginOS.apk
+            release_output/CleanScreen-v1.0.7-Universal.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
       - name: Deploy APKs to jsDelivr CDN branch
         if: github.ref == 'refs/heads/main'

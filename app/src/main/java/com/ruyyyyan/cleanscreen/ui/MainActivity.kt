@@ -154,6 +154,10 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, DiagnosticActivity::class.java))
         }
 
+        binding.cardRules.setOnClickListener {
+            startActivity(Intent(this, RulesActivity::class.java))
+        }
+
         binding.cardAppList.setOnClickListener {
             startActivity(Intent(this, AppListActivity::class.java))
         }

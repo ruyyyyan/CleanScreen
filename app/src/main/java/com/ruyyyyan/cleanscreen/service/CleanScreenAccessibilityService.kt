@@ -15,6 +15,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.ruyyyyan.cleanscreen.data.model.InterceptRecord
 import com.ruyyyyan.cleanscreen.data.repository.InterceptRepository
+import com.ruyyyyan.cleanscreen.data.rules.RuleEngine
 import com.ruyyyyan.cleanscreen.utils.FloatingToast
 import com.ruyyyyan.cleanscreen.utils.ServiceStateHolder
 import java.util.concurrent.ConcurrentHashMap
@@ -23,6 +24,7 @@ import java.util.regex.Pattern
 class CleanScreenAccessibilityService : AccessibilityService() {
 
     private val repository by lazy { InterceptRepository.getInstance(applicationContext) }
+    private val ruleEngine by lazy { RuleEngine.getInstance(applicationContext) }
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // Cooldown control: package -> last skip timestamp
@@ -35,6 +37,7 @@ class CleanScreenAccessibilityService : AccessibilityService() {
     private val appSkippedState = ConcurrentHashMap<String, Boolean>()
 
     private var lastForegroundPackage: String = ""
+    private var currentForegroundActivity: String = ""
     private var screenWidth: Int = 1080
     private var screenHeight: Int = 2400
 
@@ -148,6 +151,11 @@ class CleanScreenAccessibilityService : AccessibilityService() {
 
             // Process only window state transitions
             if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                val className = event.className?.toString() ?: ""
+                if (className.contains(".") || className.endsWith("Activity")) {
+                    currentForegroundActivity = className
+                }
+
                 handleWindowStateChanged(pkgName, now)
 
                 // Temporal guard: scan for skip buttons only within the first 3.5 seconds of app launch
@@ -156,7 +164,7 @@ class CleanScreenAccessibilityService : AccessibilityService() {
 
                 if (now - launchTime < 3500 && !alreadySkipped) {
                     clearAllPendingScans()
-                    val skipped = scanAndSkipAd(pkgName, rootInActiveWindow)
+                    val skipped = scanAndSkipAd(pkgName, currentForegroundActivity, rootInActiveWindow)
                     if (!skipped) {
                         scheduleBurstScans(pkgName)
                     }
@@ -190,7 +198,7 @@ class CleanScreenAccessibilityService : AccessibilityService() {
                             return
                         }
 
-                        val skipped = scanAndSkipAd(pkgName, rootInActiveWindow)
+                        val skipped = scanAndSkipAd(pkgName, currentForegroundActivity, rootInActiveWindow)
                         if (skipped) {
                             clearAllPendingScans()
                         }
@@ -258,7 +266,12 @@ class CleanScreenAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun scanAndSkipAd(packageName: String, rootNode: AccessibilityNodeInfo?): Boolean {
+    /**
+     * Dual-stage Ad Skip Processor:
+     * Stage 1: Specialized GKD-style rule matching with Activity isolation.
+     * Stage 2: Temporal 3.5s universal strict DFS skip locator.
+     */
+    private fun scanAndSkipAd(packageName: String, currentActivity: String, rootNode: AccessibilityNodeInfo?): Boolean {
         if (rootNode == null) return false
         if (!repository.isAppEnabled(packageName)) return false
 
@@ -269,9 +282,40 @@ class CleanScreenAccessibilityService : AccessibilityService() {
         }
 
         try {
-            val targetNode = findStrictSkipNode(rootNode)
-            if (targetNode != null) {
-                val clicked = clickNodeOrGesture(targetNode)
+            // Stage 1: Specialized precision rule matching
+            val ruleMatch = ruleEngine.findMatchingNode(rootNode, packageName, currentActivity, screenHeight)
+            if (ruleMatch != null) {
+                val (targetNode, rule) = ruleMatch
+                val clicked = clickNodeOrGesture(targetNode, rule.clickParentIfPossible)
+                if (clicked) {
+                    lastSkipTimes[packageName] = now
+                    appSkippedState[packageName] = true
+                    val appName = if (rule.appName.isNotEmpty()) rule.appName else getAppLabel(packageName)
+
+                    repository.recordIntercept(
+                        InterceptRecord(
+                            packageName = packageName,
+                            appName = appName,
+                            type = InterceptRecord.TYPE_SPLASH_SKIP,
+                            description = "规则引擎精准跳过【$appName】"
+                        )
+                    )
+
+                    if (repository.isShowToastEnabled) {
+                        FloatingToast.showToast(applicationContext, "已跳过【$appName】开屏广告")
+                    }
+                    if (repository.isVibrateEnabled) {
+                        FloatingToast.vibrateFeedback(applicationContext)
+                    }
+
+                    return true
+                }
+            }
+
+            // Stage 2: Universal strict DFS skip locator fallback
+            val fallbackNode = findStrictSkipNode(rootNode)
+            if (fallbackNode != null) {
+                val clicked = clickNodeOrGesture(fallbackNode)
                 if (clicked) {
                     lastSkipTimes[packageName] = now
                     appSkippedState[packageName] = true
@@ -282,7 +326,7 @@ class CleanScreenAccessibilityService : AccessibilityService() {
                             packageName = packageName,
                             appName = appName,
                             type = InterceptRecord.TYPE_SPLASH_SKIP,
-                            description = "自动跳过开屏广告"
+                            description = "自动跳过【$appName】开屏广告"
                         )
                     )
 
@@ -365,8 +409,15 @@ class CleanScreenAccessibilityService : AccessibilityService() {
                 viewId.endsWith(":id/splash_skip_tv")
     }
 
-    private fun clickNodeOrGesture(node: AccessibilityNodeInfo): Boolean {
+    private fun clickNodeOrGesture(node: AccessibilityNodeInfo, preferParent: Boolean = false): Boolean {
         try {
+            if (preferParent) {
+                val parent = node.parent
+                if (parent != null && parent.isClickable && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    return true
+                }
+            }
+
             if (node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                 return true
             }
