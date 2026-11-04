@@ -19,6 +19,7 @@ import com.ruyyyyan.cleanscreen.utils.AccessibilityServiceState
 import com.ruyyyyan.cleanscreen.utils.PermissionUtils
 import com.ruyyyyan.cleanscreen.utils.RestrictedSettingsStatus
 import com.ruyyyyan.cleanscreen.utils.ServiceStateHolder
+import com.ruyyyyan.cleanscreen.utils.ShizukuHelper
 
 class DiagnosticActivity : AppCompatActivity() {
 
@@ -187,6 +188,8 @@ class DiagnosticActivity : AppCompatActivity() {
         sb.append("• 设备型号: ").append(Build.MANUFACTURER).append(" ").append(Build.MODEL).append("\n")
         sb.append("• Android版本: ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
         sb.append("• 应用进程 PID: ").append(pid).append("\n")
+        val shizukuDesc = if (ShizukuHelper.isPermissionGranted()) "GRANTED (已授权高权限)" else if (ShizukuHelper.isShizukuAvailable()) "AVAILABLE (运行中但未授权)" else "NOT_RUNNING (未运行)"
+        sb.append("• Shizuku 特权状态: ").append(shizukuDesc).append("\n")
         sb.append("• 全局无障碍开关 (accessibility_enabled): ").append(if (isAccessibilityGlobalOn) "1 (开启)" else "0 (关闭)").append("\n")
         sb.append("• AMS 已绑定列表中是否存在本服务: ").append(if (isListedInAms) "YES (已绑定)" else "NO (未列入)").append("\n")
         sb.append("• 服务内存实例状态: ").append(if (isInstanceRunning) "ACTIVE (运行中)" else "INACTIVE (空闲/未实例化)").append("\n")
@@ -255,7 +258,8 @@ class DiagnosticActivity : AppCompatActivity() {
         sb.append("=== CleanScreen Accessibility Diagnostic Report ===\n")
         sb.append("Device: ").append(Build.MANUFACTURER).append(" ").append(Build.MODEL).append("\n")
         sb.append("OS Version: Android ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
-        sb.append("App Version: 1.0.6 (Code 7)\n")
+        sb.append("App Version: 1.0.8 (Code 9)\n")
+        sb.append("Shizuku Status: ").append(if (ShizukuHelper.isPermissionGranted()) "Authorized" else if (ShizukuHelper.isShizukuAvailable()) "Running (Not Authorized)" else "Not Running").append("\n")
         sb.append("Service State: ").append(state.name).append(" (").append(state.description).append(")\n")
         sb.append("Restricted Settings: ").append(restricted.label).append("\n")
         sb.append("Process PID: ").append(Process.myPid()).append("\n")

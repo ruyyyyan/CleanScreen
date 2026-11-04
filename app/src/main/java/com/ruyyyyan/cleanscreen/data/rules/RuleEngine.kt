@@ -12,11 +12,12 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
 
 /**
- * Intelligent Rule Matching Engine inspired by GKD and LiTiaotiao.
+ * Intelligent Rule Matching Engine inspired by GKD, LiTiaotiao, SKIP, and Android-Touch-Helper.
  * Features:
  * - O(1) package-indexed rule resolution
  * - Activity-level isolation to eliminate in-app false positives
  * - Position bounding-box verification
+ * - Relative coordinate tap fallback
  * - Seamless JSON / plain-text rule import & export
  */
 class RuleEngine private constructor(private val context: Context) {
@@ -34,6 +35,19 @@ class RuleEngine private constructor(private val context: Context) {
 
     // Overridden enabled/disabled states: ruleId -> isEnabled
     private val ruleStates = ConcurrentHashMap<String, Boolean>()
+
+    sealed class MatchAction(val rule: SkipRule) {
+        class NodeMatch(val node: AccessibilityNodeInfo, rule: SkipRule) : MatchAction(rule)
+        class CoordinateMatch(val xRatio: Float, val yRatio: Float, rule: SkipRule) : MatchAction(rule)
+    }
+
+    data class CandidateNode(
+        val node: AccessibilityNodeInfo,
+        val text: String,
+        val viewId: String,
+        val bounds: Rect,
+        val isLikelySkip: Boolean
+    )
 
     companion object {
         private const val TAG = "RuleEngine"
@@ -105,14 +119,14 @@ class RuleEngine private constructor(private val context: Context) {
     }
 
     /**
-     * Searches for a matching skip button node given the root node, current package, and foreground activity.
+     * Finds matching action (either node-based or coordinate-based) for the foreground app.
      */
-    fun findMatchingNode(
+    fun findMatchingAction(
         rootNode: AccessibilityNodeInfo,
         packageName: String,
         currentActivity: String,
         screenHeight: Int
-    ): Pair<AccessibilityNodeInfo, SkipRule>? {
+    ): MatchAction? {
         val candidates = rulesByPackage[packageName] ?: return null
 
         for (rule in candidates) {
@@ -128,14 +142,34 @@ class RuleEngine private constructor(private val context: Context) {
                 }
             }
 
-            // Node search according to rule criteria
+            // 1. Relative coordinate matching (Android-Touch-Helper style)
+            if (rule.hasCoordinateTap()) {
+                return MatchAction.CoordinateMatch(rule.coordinateX, rule.coordinateY, rule)
+            }
+
+            // 2. Node search according to rule criteria
             val matchedNode = findNodeMatchingRule(rootNode, rule, screenHeight)
             if (matchedNode != null) {
-                return Pair(matchedNode, rule)
+                return MatchAction.NodeMatch(matchedNode, rule)
             }
         }
 
         return null
+    }
+
+    /**
+     * Searches for a matching skip button node given the root node, current package, and foreground activity.
+     */
+    fun findMatchingNode(
+        rootNode: AccessibilityNodeInfo,
+        packageName: String,
+        currentActivity: String,
+        screenHeight: Int
+    ): Pair<AccessibilityNodeInfo, SkipRule>? {
+        val action = findMatchingAction(rootNode, packageName, currentActivity, screenHeight)
+        return if (action is MatchAction.NodeMatch) {
+            Pair(action.node, action.rule)
+        } else null
     }
 
     private fun findNodeMatchingRule(
@@ -210,6 +244,57 @@ class RuleEngine private constructor(private val context: Context) {
             Pattern.compile(regexStr, Pattern.CASE_INSENSITIVE)
         }
         return pattern.matcher(content).matches()
+    }
+
+    /**
+     * Extracts candidate skip nodes for the Floating Node Inspector.
+     */
+    fun extractCandidateNodes(rootNode: AccessibilityNodeInfo, screenWidth: Int, screenHeight: Int): List<CandidateNode> {
+        val list = mutableListOf<CandidateNode>()
+        collectCandidateNodes(rootNode, screenWidth, screenHeight, list, 0)
+        return list.sortedByDescending { it.isLikelySkip }
+    }
+
+    private fun collectCandidateNodes(
+        node: AccessibilityNodeInfo,
+        screenWidth: Int,
+        screenHeight: Int,
+        outList: MutableList<CandidateNode>,
+        depth: Int
+    ) {
+        if (depth > 12) return
+
+        val text = node.text?.toString()?.trim() ?: ""
+        val desc = node.contentDescription?.toString()?.trim() ?: ""
+        val viewId = node.viewIdResourceName ?: ""
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+
+        val hasContent = text.isNotEmpty() || desc.isNotEmpty() || viewId.isNotEmpty()
+        if (hasContent && rect.width() > 0 && rect.height() > 0) {
+            val content = "$text $desc"
+            val isLikely = content.contains("跳过") ||
+                    content.contains("关闭") ||
+                    content.contains("Skip", ignoreCase = true) ||
+                    viewId.contains("skip", ignoreCase = true) ||
+                    viewId.contains("close", ignoreCase = true) ||
+                    (rect.top <= screenHeight * 0.25 && (node.isClickable || viewId.isNotEmpty()))
+
+            outList.add(
+                CandidateNode(
+                    node = node,
+                    text = if (text.isNotEmpty()) text else desc,
+                    viewId = viewId,
+                    bounds = rect,
+                    isLikelySkip = isLikely
+                )
+            )
+        }
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectCandidateNodes(child, screenWidth, screenHeight, outList, depth + 1)
+        }
     }
 
     /**
@@ -300,8 +385,10 @@ class RuleEngine private constructor(private val context: Context) {
     }
 
     /**
-     * Imports simple line-based text rules (LiTiaotiao compatible format):
-     * e.g. "com.example.app, btn_skip, ^跳过$"
+     * Imports simple line-based text rules (LiTiaotiao & Android-Touch-Helper compatible format):
+     * Supports both:
+     * 1) "com.example.app, btn_skip, ^跳过$, 应用名"
+     * 2) "com.example.app, 0.88, 0.06, 应用名" (coordinate tap)
      */
     fun importRulesFromText(text: String): Int {
         var count = 0
@@ -314,18 +401,35 @@ class RuleEngine private constructor(private val context: Context) {
             if (parts.isNotEmpty()) {
                 val pkg = parts[0]
                 if (pkg.contains(".")) {
-                    val targetId = if (parts.size > 1) parts[1] else ""
-                    val targetText = if (parts.size > 2) parts[2] else "^跳过$"
-                    val appName = if (parts.size > 3) parts[3] else pkg
+                    val isCoordX = parts.size > 1 && parts[1].toFloatOrNull() != null && parts[1].toFloat() in 0f..1f
+                    val isCoordY = parts.size > 2 && parts[2].toFloatOrNull() != null && parts[2].toFloat() in 0f..1f
 
-                    val rule = SkipRule(
-                        id = "custom:$pkg:${System.currentTimeMillis()}_$count",
-                        packageName = pkg,
-                        appName = appName,
-                        targetId = targetId,
-                        targetTextRegex = targetText,
-                        isBuiltin = false
-                    )
+                    val rule = if (isCoordX && isCoordY) {
+                        val coordX = parts[1].toFloat()
+                        val coordY = parts[2].toFloat()
+                        val appName = if (parts.size > 3) parts[3] else pkg
+                        SkipRule(
+                            id = "custom:$pkg:coord_${System.currentTimeMillis()}_$count",
+                            packageName = pkg,
+                            appName = appName,
+                            coordinateX = coordX,
+                            coordinateY = coordY,
+                            isBuiltin = false
+                        )
+                    } else {
+                        val targetId = if (parts.size > 1) parts[1] else ""
+                        val targetText = if (parts.size > 2) parts[2] else "^跳过$"
+                        val appName = if (parts.size > 3) parts[3] else pkg
+                        SkipRule(
+                            id = "custom:$pkg:${System.currentTimeMillis()}_$count",
+                            packageName = pkg,
+                            appName = appName,
+                            targetId = targetId,
+                            targetTextRegex = targetText,
+                            isBuiltin = false
+                        )
+                    }
+
                     customRules.add(rule)
                     count++
                 }

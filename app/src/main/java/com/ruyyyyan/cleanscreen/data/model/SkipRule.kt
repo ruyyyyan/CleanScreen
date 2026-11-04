@@ -4,8 +4,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Advanced skip rule model inspired by GKD and LiTiaotiao.
- * Supports multi-dimensional matching: package, activity, viewId, text regex, and screen position.
+ * Advanced skip rule model inspired by GKD, LiTiaotiao, SKIP, and Android-Touch-Helper.
+ * Supports multi-dimensional matching: package, activity, viewId, text regex, screen position,
+ * and relative coordinate tap fallback.
  */
 data class SkipRule(
     val id: String, // Unique rule identifier, e.g. "builtin:com.sina.weibo:splash"
@@ -18,6 +19,8 @@ data class SkipRule(
     val targetDescRegex: String = "", // Regex for node contentDescription
     val positionZone: PositionZone = PositionZone.EDGE, // TOP_ZONE, BOTTOM_ZONE, EDGE, or ANY
     val clickParentIfPossible: Boolean = false, // If true, click parent container if node is small
+    val coordinateX: Float = -1f, // Relative X coordinate ratio (0.0 - 1.0, e.g. 0.88f for top-right)
+    val coordinateY: Float = -1f, // Relative Y coordinate ratio (0.0 - 1.0, e.g. 0.06f for top-right)
     val isEnabled: Boolean = true,
     val isBuiltin: Boolean = true
 ) {
@@ -27,6 +30,11 @@ data class SkipRule(
         BOTTOM_ZONE,  // Bottom 15% of screen
         EDGE          // Top 25% or bottom 15%
     }
+
+    /**
+     * Returns true if this rule specifies a relative coordinate tap fallback
+     */
+    fun hasCoordinateTap(): Boolean = coordinateX in 0f..1f && coordinateY in 0f..1f
 
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -40,6 +48,8 @@ data class SkipRule(
             put("targetDescRegex", targetDescRegex)
             put("positionZone", positionZone.name)
             put("clickParentIfPossible", clickParentIfPossible)
+            put("coordinateX", coordinateX.toDouble())
+            put("coordinateY", coordinateY.toDouble())
             put("isEnabled", isEnabled)
             put("isBuiltin", isBuiltin)
         }
@@ -73,6 +83,8 @@ data class SkipRule(
                 targetDescRegex = json.optString("targetDescRegex", ""),
                 positionZone = zone,
                 clickParentIfPossible = json.optBoolean("clickParentIfPossible", false),
+                coordinateX = json.optDouble("coordinateX", -1.0).toFloat(),
+                coordinateY = json.optDouble("coordinateY", -1.0).toFloat(),
                 isEnabled = json.optBoolean("isEnabled", true),
                 isBuiltin = json.optBoolean("isBuiltin", false)
             )

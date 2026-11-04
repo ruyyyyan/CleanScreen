@@ -72,6 +72,11 @@ class RuleAdapter(
             }
 
             val criteria = buildString {
+                if (rule.hasCoordinateTap()) {
+                    val x = (rule.coordinateX * 100).toInt()
+                    val y = (rule.coordinateY * 100).toInt()
+                    append("[坐标点击: $x%, $y%] ")
+                }
                 if (rule.activityIds.isNotEmpty()) {
                     val actName = rule.activityIds.first().substringAfterLast(".")
                     append("[$actName] ")

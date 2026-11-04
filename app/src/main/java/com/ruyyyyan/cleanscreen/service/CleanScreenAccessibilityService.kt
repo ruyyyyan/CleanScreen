@@ -3,6 +3,7 @@ package com.ruyyyyan.cleanscreen.service
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
+import android.content.Context
 import android.content.Intent
 import android.graphics.Path
 import android.graphics.Rect
@@ -11,20 +12,29 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.util.Log
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.ruyyyyan.cleanscreen.data.model.InterceptRecord
 import com.ruyyyyan.cleanscreen.data.repository.InterceptRepository
 import com.ruyyyyan.cleanscreen.data.rules.RuleEngine
-import com.ruyyyyan.cleanscreen.utils.FloatingToast
+import com.ruyyyyan.cleanscreen.ui.FloatingToast
 import com.ruyyyyan.cleanscreen.utils.ServiceStateHolder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
 
+/**
+ * Core Accessibility Service:
+ * - Lifecyle strictly managed by Android AccessibilityManager
+ * - High-speed zero-latency Ad-skip pipeline
+ * - GKD-style multi-dimensional rule engine with Activity isolation
+ * - Android-Touch-Helper style relative coordinate tap fallback
+ * - Asynchronous background persistence
+ */
 class CleanScreenAccessibilityService : AccessibilityService() {
 
-    private val repository by lazy { InterceptRepository.getInstance(applicationContext) }
-    private val ruleEngine by lazy { RuleEngine.getInstance(applicationContext) }
+    private val repository by lazy { InterceptRepository.getInstance(this) }
+    private val ruleEngine by lazy { RuleEngine.getInstance(this) }
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // Cooldown control: package -> last skip timestamp
@@ -48,6 +58,18 @@ class CleanScreenAccessibilityService : AccessibilityService() {
 
         @Volatile
         var isServiceRunning = false
+            private set
+
+        @Volatile
+        var instance: CleanScreenAccessibilityService? = null
+            private set
+
+        @Volatile
+        var lastActivePackage: String = ""
+            private set
+
+        @Volatile
+        var lastActiveActivity: String = ""
             private set
 
         // Strict skip regex: matches only pure "跳过", "关闭广告", "Skip", or countdown buttons
@@ -81,12 +103,14 @@ class CleanScreenAccessibilityService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         Log.i(TAG, "onCreate: AccessibilityService initializing on PID=${Process.myPid()}, Thread=${Thread.currentThread().name}")
         ServiceStateHolder.recordEvent("ON_CREATE", "PID=${Process.myPid()}")
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         isServiceRunning = true
         Log.i(TAG, "onServiceConnected: System bound CleanScreenAccessibilityService")
 
@@ -98,134 +122,105 @@ class CleanScreenAccessibilityService : AccessibilityService() {
             info.flags = info.flags or
                 AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-            info.notificationTimeout = 100
+
             serviceInfo = info
-            Log.i(TAG, "onServiceConnected: Dynamic serviceInfo applied successfully, flags=${info.flags}")
+            Log.d(TAG, "onServiceConnected: Reinforced serviceInfo flags=${info.flags}")
         } catch (e: Throwable) {
-            Log.e(TAG, "onServiceConnected: Failed to configure dynamic serviceInfo", e)
+            Log.e(TAG, "Failed to re-apply serviceInfo", e)
         }
 
         updateScreenDimensions()
-        ServiceStateHolder.markServiceConnected()
+        ServiceStateHolder.recordEvent("ON_CONNECTED", "Flags reinforced")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
-        Log.w(TAG, "onUnbind: System unbinding CleanScreenAccessibilityService, action=${intent?.action}")
+        Log.w(TAG, "onUnbind: System unbinding service")
         isServiceRunning = false
-        clearAllPendingScans()
-        ServiceStateHolder.markServiceUnbound(intent?.action ?: "Normal system unbind")
+        instance = null
+        cancelPendingScans()
+        ServiceStateHolder.recordEvent("ON_UNBIND", "Service unbound by AMS")
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
-        super.onDestroy()
-        Log.i(TAG, "onDestroy: CleanScreenAccessibilityService being destroyed")
+        Log.w(TAG, "onDestroy: CleanScreenAccessibilityService destroyed")
         isServiceRunning = false
-        clearAllPendingScans()
-        ServiceStateHolder.markServiceDestroyed()
+        instance = null
+        cancelPendingScans()
+        ServiceStateHolder.recordEvent("ON_DESTROY", "Service destroyed")
+        super.onDestroy()
     }
 
     override fun onInterrupt() {
-        Log.w(TAG, "onInterrupt: CleanScreen Accessibility feedback interrupted by system")
-        ServiceStateHolder.recordEvent("ON_INTERRUPT", "Accessibility feedback interrupted")
+        Log.w(TAG, "onInterrupt: Accessibility service interrupted by system")
+        cancelPendingScans()
+        ServiceStateHolder.recordEvent("ON_INTERRUPT", "System interrupted")
     }
 
-    private fun updateScreenDimensions() {
-        try {
-            val metrics = resources.displayMetrics
-            screenWidth = metrics.widthPixels
-            screenHeight = metrics.heightPixels
-        } catch (e: Throwable) {
-            // Suppress fallback
-        }
-    }
-
+    /**
+     * Fast-path window event dispatcher.
+     */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event == null) return
+
         try {
-            if (event == null || !repository.isMasterEnabled) return
-
-            val pkgName = event.packageName?.toString() ?: return
-            if (pkgName in IGNORED_PACKAGES) return
-
-            val now = System.currentTimeMillis()
-
-            // Process only window state transitions
             if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-                val className = event.className?.toString() ?: ""
-                if (className.contains(".") || className.endsWith("Activity")) {
-                    currentForegroundActivity = className
-                }
-
-                handleWindowStateChanged(pkgName, now)
-
-                // Temporal guard: scan for skip buttons only within the first 3.5 seconds of app launch
-                val launchTime = appLaunchTimes[pkgName] ?: 0L
-                val alreadySkipped = appSkippedState[pkgName] ?: false
-
-                if (now - launchTime < 3500 && !alreadySkipped) {
-                    clearAllPendingScans()
-                    val skipped = scanAndSkipAd(pkgName, currentForegroundActivity, rootInActiveWindow)
-                    if (!skipped) {
-                        scheduleBurstScans(pkgName)
-                    }
-                }
+                handleWindowStateChanged(event)
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Error handling accessibility event", e)
         }
     }
 
-    private fun clearAllPendingScans() {
-        for (runnable in pendingScanRunnables) {
-            mainHandler.removeCallbacks(runnable)
-        }
-        pendingScanRunnables.clear()
-    }
-
-    private fun scheduleBurstScans(pkgName: String) {
-        if (!repository.isFastModeEnabled || !repository.isAppEnabled(pkgName)) return
-
-        for (delay in BURST_DELAYS) {
-            val runnable = object : Runnable {
-                override fun run() {
-                    try {
-                        val now = System.currentTimeMillis()
-                        val launchTime = appLaunchTimes[pkgName] ?: 0L
-                        val alreadySkipped = appSkippedState[pkgName] ?: false
-
-                        // Stop scanning if window time expired or ad was already skipped
-                        if (now - launchTime >= 3500 || alreadySkipped || lastForegroundPackage != pkgName) {
-                            return
-                        }
-
-                        val skipped = scanAndSkipAd(pkgName, currentForegroundActivity, rootInActiveWindow)
-                        if (skipped) {
-                            clearAllPendingScans()
-                        }
-                    } catch (e: Throwable) {
-                        // Suppress background scan errors
-                    }
-                }
-            }
-            pendingScanRunnables.add(runnable)
-            mainHandler.postDelayed(runnable, delay)
-        }
-    }
-
-    private fun handleWindowStateChanged(currentPkg: String, now: Long) {
+    private fun updateScreenDimensions() {
         try {
-            // Anti-misclick auto return logic
-            if (repository.isPreventMisclickJumpEnabled && lastForegroundPackage.isNotEmpty()) {
-                val lastPkg = lastForegroundPackage
-                val lastLaunchTime = appLaunchTimes[lastPkg] ?: 0L
+            val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val bounds = wm.currentWindowMetrics.bounds
+                screenWidth = bounds.width()
+                screenHeight = bounds.height()
+            } else {
+                val display = wm.defaultDisplay
+                val point = android.graphics.Point()
+                display.getRealSize(point)
+                screenWidth = point.x
+                screenHeight = point.y
+            }
+        } catch (e: Exception) {
+            screenWidth = 1080
+            screenHeight = 2400
+        }
+    }
 
-                // If redirected to shopping app within 3 seconds of cold launch
-                if (currentPkg != lastPkg &&
-                    now - lastLaunchTime < 3000 &&
-                    currentPkg in JUMP_TARGET_PACKAGES &&
-                    lastPkg !in JUMP_TARGET_PACKAGES
-                ) {
-                    val originalAppName = getAppLabel(lastPkg)
+    private fun handleWindowStateChanged(event: AccessibilityEvent) {
+        val pkgName = event.packageName?.toString() ?: return
+        if (IGNORED_PACKAGES.contains(pkgName)) return
+
+        val className = event.className?.toString() ?: ""
+        if (className.isNotEmpty()) {
+            currentForegroundActivity = className
+            lastActiveActivity = className
+        }
+        lastActivePackage = pkgName
+
+        // Global master switch verification (cached in memory)
+        if (!repository.isMasterEnabled) {
+            return
+        }
+
+        val currentPkg = pkgName
+        val now = System.currentTimeMillis()
+
+        try {
+            // Anti-Misclick auto-redirect detection
+            if (repository.isPreventMisclickJumpEnabled) {
+                val sourceLaunchTime = appLaunchTimes[lastForegroundPackage] ?: 0L
+                val isColdLaunchRecent = (now - sourceLaunchTime) < 3500
+                val isSourceTargetDifferent = lastForegroundPackage.isNotEmpty() && lastForegroundPackage != currentPkg
+                val isKnownAdTarget = JUMP_TARGET_PACKAGES.contains(currentPkg)
+
+                if (isColdLaunchRecent && isSourceTargetDifferent && isKnownAdTarget) {
+                    val originalAppName = getAppLabel(lastForegroundPackage)
                     val targetAppName = getAppLabel(currentPkg)
 
                     mainHandler.postDelayed({
@@ -233,10 +228,10 @@ class CleanScreenAccessibilityService : AccessibilityService() {
                             performGlobalAction(GLOBAL_ACTION_BACK)
                             repository.recordIntercept(
                                 InterceptRecord(
-                                    packageName = lastPkg,
+                                    packageName = lastForegroundPackage,
                                     appName = originalAppName,
-                                    type = InterceptRecord.TYPE_MISCLICK_RETURN,
-                                    description = "拦截从【$originalAppName】误触跳转至【$targetAppName】"
+                                    type = InterceptRecord.TYPE_PREVENT_JUMP,
+                                    description = "已拦截开屏误触跳转至【$targetAppName】"
                                 )
                             )
 
@@ -264,11 +259,50 @@ class CleanScreenAccessibilityService : AccessibilityService() {
         } catch (e: Throwable) {
             Log.e(TAG, "Error in handleWindowStateChanged", e)
         }
+
+        // Cancel previous pending bursts
+        cancelPendingScans()
+
+        // Scan immediately
+        val skipped = scanAndSkipAd(currentPkg, currentForegroundActivity, rootInActiveWindow)
+        if (skipped) return
+
+        // Temporal burst scan (GKD & LiTiaotiao temporal window)
+        val launchTime = appLaunchTimes[currentPkg] ?: now
+        if ((now - launchTime) < 3200 && (appSkippedState[currentPkg] != true)) {
+            scheduleBurstScans(currentPkg)
+        }
+    }
+
+    private fun scheduleBurstScans(packageName: String) {
+        val isFastMode = repository.isFastModeEnabled
+        val delays = if (isFastMode) {
+            longArrayOf(100, 250, 500, 900)
+        } else {
+            BURST_DELAYS
+        }
+
+        for (delay in delays) {
+            val runnable = Runnable {
+                if (lastForegroundPackage == packageName && appSkippedState[packageName] != true) {
+                    scanAndSkipAd(packageName, currentForegroundActivity, rootInActiveWindow)
+                }
+            }
+            pendingScanRunnables.add(runnable)
+            mainHandler.postDelayed(runnable, delay)
+        }
+    }
+
+    private fun cancelPendingScans() {
+        for (runnable in pendingScanRunnables) {
+            mainHandler.removeCallbacks(runnable)
+        }
+        pendingScanRunnables.clear()
     }
 
     /**
      * Dual-stage Ad Skip Processor:
-     * Stage 1: Specialized GKD-style rule matching with Activity isolation.
+     * Stage 1: Specialized GKD-style rule matching with Activity isolation & Coordinate tap.
      * Stage 2: Temporal 3.5s universal strict DFS skip locator.
      */
     private fun scanAndSkipAd(packageName: String, currentActivity: String, rootNode: AccessibilityNodeInfo?): Boolean {
@@ -283,21 +317,25 @@ class CleanScreenAccessibilityService : AccessibilityService() {
 
         try {
             // Stage 1: Specialized precision rule matching
-            val ruleMatch = ruleEngine.findMatchingNode(rootNode, packageName, currentActivity, screenHeight)
-            if (ruleMatch != null) {
-                val (targetNode, rule) = ruleMatch
-                val clicked = clickNodeOrGesture(targetNode, rule.clickParentIfPossible)
+            val action = ruleEngine.findMatchingAction(rootNode, packageName, currentActivity, screenHeight)
+            if (action != null) {
+                val clicked = when (action) {
+                    is RuleEngine.MatchAction.NodeMatch -> clickNodeOrGesture(action.node, action.rule.clickParentIfPossible)
+                    is RuleEngine.MatchAction.CoordinateMatch -> dispatchCoordinateTap(action.xRatio * screenWidth, action.yRatio * screenHeight)
+                }
+
                 if (clicked) {
                     lastSkipTimes[packageName] = now
                     appSkippedState[packageName] = true
-                    val appName = if (rule.appName.isNotEmpty()) rule.appName else getAppLabel(packageName)
+                    val appName = if (action.rule.appName.isNotEmpty()) action.rule.appName else getAppLabel(packageName)
+                    val descPrefix = if (action is RuleEngine.MatchAction.CoordinateMatch) "坐标模拟点击" else "规则引擎精准跳过"
 
                     repository.recordIntercept(
                         InterceptRecord(
                             packageName = packageName,
                             appName = appName,
                             type = InterceptRecord.TYPE_SPLASH_SKIP,
-                            description = "规则引擎精准跳过【$appName】"
+                            description = "$descPrefix【$appName】"
                         )
                     )
 
@@ -407,6 +445,29 @@ class CleanScreenAccessibilityService : AccessibilityService() {
                 viewId.endsWith(":id/skip_view") ||
                 viewId.endsWith(":id/btn_skip") ||
                 viewId.endsWith(":id/splash_skip_tv")
+    }
+
+    /**
+     * Public click helper for node or gesture.
+     */
+    fun clickTargetNode(node: AccessibilityNodeInfo, preferParent: Boolean = false): Boolean {
+        return clickNodeOrGesture(node, preferParent)
+    }
+
+    /**
+     * Dispatches relative coordinate tap via Android gesture API.
+     */
+    fun dispatchCoordinateTap(x: Float, y: Float): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val path = Path().apply {
+                moveTo(x, y)
+            }
+            val gesture = GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0, 40))
+                .build()
+            return dispatchGesture(gesture, null, null)
+        }
+        return false
     }
 
     private fun clickNodeOrGesture(node: AccessibilityNodeInfo, preferParent: Boolean = false): Boolean {

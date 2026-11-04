@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 基础与辅助服务权限 -->
+    <!-- 基础与辅助服务权限 (纯离线运行，严禁申请 INTERNET 权限) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -75,6 +75,12 @@
             android:exported="false"
             android:label="广告跳过规则中心" />
 
+        <!-- 悬浮窗可视化节点审查器服务 (参考 SKIP 交互架构) -->
+        <service
+            android:name=".service.FloatingInspectorService"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- 核心无障碍服务 (由系统 AccessibilityManager 独立托管生命周期) -->
         <service
             android:name=".service.CleanScreenAccessibilityService"
@@ -89,6 +95,15 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+
+        <!-- Shizuku 特权接口 Provider (参考 AutoSkip / GKD 特权架构) -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <!-- 开机自启广播接收器 -->
         <receiver

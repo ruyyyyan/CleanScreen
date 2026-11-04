@@ -32,47 +32,48 @@ jobs:
       - name: Copy & Rename APK
         run: |
           mkdir -p release_output
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.7-Xiaomi-HyperOS.apk
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.7-iQOO-OriginOS.apk
-          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.7-Universal.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.8-Xiaomi-HyperOS.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.8-iQOO-OriginOS.apk
+          cp app/build/outputs/apk/release/app-release.apk release_output/CleanScreen-v1.0.8-Universal.apk
           ls -lh release_output/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CleanScreen-v1.0.7
+          name: CleanScreen-v1.0.8
           path: release_output/*.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.7
-          name: "清屏 CleanScreen v1.0.7 (融合 GKD 规则引擎 & 李跳跳零网络权限架构版)"
+          tag_name: v1.0.8
+          name: "清屏 CleanScreen v1.0.8 (Shizuku高权限特权引擎 & 悬浮窗审查取词器)"
           body: |
-            ### 🚀 清屏 (CleanScreen) v1.0.7 重磅重构发布
+            ### 🚀 清屏 (CleanScreen) v1.0.8 重磅升级发布
 
-            融合开源标杆 **李跳跳** 的极致纯净隐私理念与 **GKD** 的精准规则引擎架构，专为 **iQOO Neo 11 (OriginOS 6 / Android 16)** 与 **小米 14 / 15 / 16 (HyperOS 1/2)** 等主流系统优化！
+            全面借鉴 GitHub 顶尖开源项目（**AutoSkip、SKIP、GKD、Android-Touch-Helper、李跳跳**）的最新技术精髓，专为 **iQOO Neo 11 (OriginOS 6 / Android 16)** 与 **小米 14 / 15 / 16 (HyperOS 1/2)** 打造！
 
-            #### ✨ v1.0.7 核心特性与架构升级：
-            1. **【李跳跳式】零网络权限·100% 离线运行**：
-               - 清屏代码中未申请任何 `INTERNET` 网络权限，无任何数据上传逻辑，完全本地离线运行，彻底杜绝隐私与无障碍敏感权限安全顾虑。
-            2. **【GKD 式】高性能规则引擎与双轨跳过机制**：
-               - **Activity 级作用域隔离**：精准识别前台开屏 Activity，离开开屏界面后规则立即静默，杜绝误触微信聊天界面加号、知乎/贴吧等内页操作；
-               - **控件 View ID + 正则 + 屏幕坐标三维校验**：通过 View ID 与屏幕边界（顶部 25% / 底部 15%）限制跳过热区，毫秒级精准命中广告；
-               - **双轨极速扫描**：首阶段 GKD 规则库 2ms 极速检索，第二阶段通用启发式正则兜底，兼顾极致精准与全网未知 App 适配。
-            3. **内置 35+ 款高频主流应用开箱即用规则**：
-               - 内置微信、微博、知乎、哔哩哔哩、网易云音乐、淘宝、京东、拼多多、酷安、贴吧、高德地图、美团、抖音、快手等主流 App 的精准跳过规则。
-            4. **全新【广告跳过规则中心】(Rule Hub)**：
-               - 支持规则列表浏览与按应用名/包名实时模糊搜索；
-               - 支持单条规则一键启用/禁用；
-               - 支持自定义规则 JSON 与便捷文本格式导入/导出，完全兼容用户自定义规则扩充。
-            5. **延续 Android 16 与 OriginOS 6 深度保活机制**：
-               - 包含 Restricted Settings 检测、AMS 状态深度诊断与全链路生命周期监控控制台。
+            #### ✨ v1.0.8 核心突破与创新功能：
+            1. **【AutoSkip / GKD 体系】Shizuku 高权限特权引擎集成**：
+               - 引入 Shizuku 系统特权 Binder API，支持无线调试授权；
+               - **一键穿透 OriginOS 6 限制**：在主界面或诊断页即可一键自动解除 Android 16【受限制的设置】(Restricted Settings) 并激活无障碍服务，完全免去手动前往设置翻找的繁琐流程；
+               - 免 Root 底层注入与保活，彻底摆脱定制 ROM 后台无障碍杀停困扰。
+            2. **【SKIP 体系】屏幕节点审查悬浮窗 (Floating Inspector)**：
+               - 引入可拖拽的桌面极简悬浮球；
+               - 打开任意未知或冷门 App 开屏广告时，点击悬浮球即可毫秒级冻结并提取该界面的 View ID、文本、Activity 与屏幕绝对/相对坐标；
+               - 支持**“测试点击”**现场验证，支持**“一键保存为规则”**自动导入规则中心，告别手动写规则！
+            3. **【Android-Touch-Helper 体系】相对坐标手势点击兜底 (Coordinate Fallback)**：
+               - 规则引擎全新支持相对坐标比例（如右上角 88%, 6%）手势点击；
+               - 彻底攻克 Flutter、Unity 游戏引擎及自绘 Canvas 等无原生文本节点的顽固开屏广告。
+            4. **【李跳跳体系】坚守 100% 离线 · 零网络权限承诺**：
+               - 全工程无任何 `android.permission.INTERNET` 权限声明，零流量消耗，零数据外泄可能，给无障碍服务带来极致安全感。
+            5. **【GKD 体系】全量 35+ 主流 App 规则中心**：
+               - 持续收录国内主流高频 App 开屏跳过规则，支持实时模糊搜索与单规则启闭。
           files: |
-            release_output/CleanScreen-v1.0.7-Xiaomi-HyperOS.apk
-            release_output/CleanScreen-v1.0.7-iQOO-OriginOS.apk
-            release_output/CleanScreen-v1.0.7-Universal.apk
+            release_output/CleanScreen-v1.0.8-Xiaomi-HyperOS.apk
+            release_output/CleanScreen-v1.0.8-iQOO-OriginOS.apk
+            release_output/CleanScreen-v1.0.8-Universal.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

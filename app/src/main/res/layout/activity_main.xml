@@ -130,7 +130,7 @@
                             android:id="@+id/chipAccessibility"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginEnd="6dp"
+                            android:layout_marginEnd="4dp"
                             android:layout_weight="1"
                             android:background="@drawable/bg_chip_rounded"
                             android:backgroundTint="@color/accent_green_light"
@@ -138,22 +138,37 @@
                             android:paddingVertical="8dp"
                             android:text="无障碍: 开启"
                             android:textColor="@color/secondary_variant"
-                            android:textSize="12sp"
+                            android:textSize="11sp"
                             android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/chipBattery"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="6dp"
+                            android:layout_marginHorizontal="4dp"
                             android:layout_weight="1"
                             android:background="@drawable/bg_chip_rounded"
                             android:backgroundTint="@color/accent_blue_light"
                             android:gravity="center"
                             android:paddingVertical="8dp"
-                            android:text="电池优化: 配置"
+                            android:text="省电: 配置"
                             android:textColor="@color/primary"
-                            android:textSize="12sp"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/chipShizuku"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_chip_rounded"
+                            android:backgroundTint="@color/accent_orange_light"
+                            android:gravity="center"
+                            android:paddingVertical="8dp"
+                            android:text="Shizuku: 检查"
+                            android:textColor="@color/status_warning"
+                            android:textSize="11sp"
                             android:textStyle="bold" />
                     </LinearLayout>
                 </LinearLayout>
@@ -469,7 +484,68 @@
                             android:src="@drawable/ic_arrow_right" />
                     </RelativeLayout>
                 </com.google.android.material.card.MaterialCardView>
-<com.google.android.material.card.MaterialCardView
+
+                <!-- 屏幕节点审查悬浮窗卡片 (参考 SKIP 交互架构) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardFloatingInspector"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="14dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/card_border"
+                    app:strokeWidth="1dp">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:padding="16dp">
+
+                        <ImageView
+                            android:id="@+id/ivIconInspector"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:layout_centerVertical="true"
+                            android:src="@drawable/ic_search"
+                            app:tint="@color/secondary" />
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_centerVertical="true"
+                            android:layout_marginStart="14dp"
+                            android:layout_toStartOf="@id/switchInspector"
+                            android:layout_toEndOf="@id/ivIconInspector"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="屏幕审查悬浮窗 (SKIP模式)"
+                                android:textColor="@color/text_primary"
+                                android:textSize="15sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="悬浮在开屏广告上，一键提取控件 ID 与坐标生成规则"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/switchInspector"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentEnd="true"
+                            android:layout_centerVertical="true" />
+                    </RelativeLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
                     android:id="@+id/cardAppList"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

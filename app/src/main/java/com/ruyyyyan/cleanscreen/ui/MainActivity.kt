@@ -5,8 +5,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -16,11 +18,14 @@ import com.ruyyyyan.cleanscreen.R
 import com.ruyyyyan.cleanscreen.data.repository.InterceptRepository
 import com.ruyyyyan.cleanscreen.databinding.ActivityMainBinding
 import com.ruyyyyan.cleanscreen.service.CleanScreenAccessibilityService
+import com.ruyyyyan.cleanscreen.service.FloatingInspectorService
 import com.ruyyyyan.cleanscreen.utils.AccessibilityServiceState
 import com.ruyyyyan.cleanscreen.utils.PermissionUtils
 import com.ruyyyyan.cleanscreen.utils.ServiceStateHolder
+import com.ruyyyyan.cleanscreen.utils.ShizukuHelper
 import com.ruyyyyan.cleanscreen.utils.VivoOptimizer
 import com.ruyyyyan.cleanscreen.utils.XiaomiOptimizer
+import rikka.shizuku.Shizuku
 
 class MainActivity : AppCompatActivity() {
 
@@ -33,6 +38,17 @@ class MainActivity : AppCompatActivity() {
         private const val REQUEST_CODE_NOTIFICATIONS = 1001
     }
 
+    private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+        if (requestCode == ShizukuHelper.REQUEST_CODE_SHIZUKU_PERMISSION) {
+            runOnUiThread {
+                updateDashboard()
+                if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "Shizuku 特权授权成功！", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
@@ -42,9 +58,15 @@ class MainActivity : AppCompatActivity() {
             setupBrandGuideBanner()
             setupListeners()
             checkAndRequestNotificationPermission()
+            Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
         } catch (e: Throwable) {
             Log.e(TAG, "Error in onCreate", e)
         }
+    }
+
+    override fun onDestroy() {
+        Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+        super.onDestroy()
     }
 
     private val stateChangeListener = {
@@ -65,16 +87,17 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        try {
-            updateDashboard()
-        } catch (e: Throwable) {
-            Log.e(TAG, "Error in onResume", e)
-        }
+        updateDashboard()
+        binding.switchInspector.isChecked = FloatingInspectorService.isServiceRunning
     }
 
     private fun checkAndRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
                 ActivityCompat.requestPermissions(
                     this,
                     arrayOf(Manifest.permission.POST_NOTIFICATIONS),
@@ -150,12 +173,36 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.chipShizuku.setOnClickListener {
+            handleShizukuChipClick()
+        }
+
         binding.cardDiagnostic.setOnClickListener {
             startActivity(Intent(this, DiagnosticActivity::class.java))
         }
 
         binding.cardRules.setOnClickListener {
             startActivity(Intent(this, RulesActivity::class.java))
+        }
+
+        binding.switchInspector.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                    Toast.makeText(this, "请授予清屏【悬浮窗】权限", Toast.LENGTH_SHORT).show()
+                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                    startActivity(intent)
+                    binding.switchInspector.isChecked = false
+                } else {
+                    FloatingInspectorService.start(this)
+                    Toast.makeText(this, "屏幕审查悬浮球已开启，进入任意广告页面点击悬浮球即可提取规则", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                FloatingInspectorService.stop(this)
+            }
+        }
+
+        binding.cardFloatingInspector.setOnClickListener {
+            binding.switchInspector.toggle()
         }
 
         binding.cardAppList.setOnClickListener {
@@ -172,6 +219,44 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
+        }
+    }
+
+    private fun handleShizukuChipClick() {
+        if (ShizukuHelper.isPermissionGranted()) {
+            AlertDialog.Builder(this)
+                .setTitle("⚡ Shizuku 特权已激活")
+                .setMessage(
+                    "检测到已连接 Shizuku 高权限服务！\n\n" +
+                    "是否立即通过 Shizuku 自动解除 OriginOS 6 / Android 16【受限制的设置】并激活无障碍服务？\n\n" +
+                    "(此操作直接通过系统底层执行，免去前往系统设置繁琐操作)"
+                )
+                .setPositiveButton("一键执行特权激活") { _, _ ->
+                    val (success, msg) = ShizukuHelper.grantPrivilegedAccess(this)
+                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                    updateDashboard()
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        } else if (ShizukuHelper.isShizukuAvailable()) {
+            AlertDialog.Builder(this)
+                .setTitle("授权 Shizuku 特权")
+                .setMessage("检测到手机已运行 Shizuku 服务，是否授权清屏访问？\n\n授权后可一键解除 OriginOS 6 敏感权限限制并自动保活无障碍。")
+                .setPositiveButton("立即授权") { _, _ ->
+                    ShizukuHelper.requestPermission()
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle("Shizuku 状态说明")
+                .setMessage(
+                    "Shizuku 当前未运行。\n\n" +
+                    "Shizuku 是一款免 Root 的 ADB 特权辅助工具。若您安装并启动了 Shizuku，清屏可直接通过特权接口自动激活无障碍服务并永久防杀。\n\n" +
+                    "若未安装或未启动 Shizuku，清屏仍将基于系统标准无障碍服务正常工作。"
+                )
+                .setPositiveButton("知道了", null)
+                .show()
         }
     }
 
@@ -276,13 +361,28 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (isBatteryIgnored) {
-                binding.chipBattery.text = "省电策略: 已优化"
+                binding.chipBattery.text = "省电: 已优化"
                 binding.chipBattery.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#E8FFEA"))
                 binding.chipBattery.setTextColor(Color.parseColor("#059669"))
             } else {
-                binding.chipBattery.text = "省电策略: 需配置"
+                binding.chipBattery.text = "省电: 需配置"
                 binding.chipBattery.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#E8F3FF"))
                 binding.chipBattery.setTextColor(Color.parseColor("#0E78F9"))
+            }
+
+            // Shizuku Status Chip
+            if (ShizukuHelper.isPermissionGranted()) {
+                binding.chipShizuku.text = "Shizuku: 已授权"
+                binding.chipShizuku.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#E8FFEA"))
+                binding.chipShizuku.setTextColor(Color.parseColor("#059669"))
+            } else if (ShizukuHelper.isShizukuAvailable()) {
+                binding.chipShizuku.text = "Shizuku: 未授权"
+                binding.chipShizuku.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FFF7E8"))
+                binding.chipShizuku.setTextColor(Color.parseColor("#FF7D00"))
+            } else {
+                binding.chipShizuku.text = "Shizuku: 未运行"
+                binding.chipShizuku.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#F3F4F6"))
+                binding.chipShizuku.setTextColor(Color.parseColor("#6B7280"))
             }
 
             val countToday = repository.getTodayInterceptCount()
