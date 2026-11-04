@@ -1,6 +1,11 @@
 package com.ruyyyyan.cleanscreen.utils
 
 import android.os.Process
+import android.content.Context
+import android.content.SharedPreferences
+import android.provider.Settings
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.ArrayDeque
 import java.util.Date
@@ -40,7 +45,47 @@ enum class AccessibilityServiceState(val description: String) {
  */
 object ServiceStateHolder {
 
-    private const val MAX_EVENT_HISTORY = 30
+    private const val MAX_EVENT_HISTORY = 60
+    private var preferences: SharedPreferences? = null
+    private var appContext: Context? = null
+
+    @Synchronized
+    fun initialize(context: Context) {
+        if (preferences != null) return
+        appContext = context.applicationContext
+        preferences = context.getSharedPreferences("service_diagnostics", Context.MODE_PRIVATE)
+        try {
+            val saved = JSONArray(preferences?.getString("events", "[]") ?: "[]")
+            for (i in 0 until saved.length()) {
+                val e = saved.getJSONObject(i)
+                eventHistory.addLast(LifecycleEvent(e.getString("name"), e.getLong("time"),
+                    e.getString("thread"), e.getInt("pid"), e.optString("details")))
+            }
+            while (eventHistory.size > MAX_EVENT_HISTORY) eventHistory.removeFirst()
+            lastConnectedTime = preferences?.getLong("connected", 0L) ?: 0L
+            lastDisconnectedTime = preferences?.getLong("disconnected", 0L) ?: 0L
+        } catch (_: Exception) { eventHistory.clear() }
+    }
+
+    private fun persistHistory() {
+        val array = JSONArray()
+        for (e in eventHistory) array.put(JSONObject().apply {
+            put("name", e.eventName); put("time", e.timestamp); put("thread", e.threadName)
+            put("pid", e.pid); put("details", e.details)
+        })
+        preferences?.edit()?.putString("events", array.toString())
+            ?.putLong("connected", lastConnectedTime)
+            ?.putLong("disconnected", lastDisconnectedTime)?.apply()
+    }
+
+    private fun settingsSnapshot(): String = try {
+        val resolver = appContext?.contentResolver
+        if (resolver == null) "" else {
+            val global = Settings.Secure.getInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0)
+            val services = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+            " | global=$global | enabled=$services"
+        }
+    } catch (_: Exception) { " | settings unavailable" }
 
     @Volatile
     var isServiceBound: Boolean = false
@@ -71,12 +116,13 @@ object ServiceStateHolder {
             timestamp = System.currentTimeMillis(),
             threadName = Thread.currentThread().name,
             pid = Process.myPid(),
-            details = details
+            details = details + settingsSnapshot()
         )
         if (eventHistory.size >= MAX_EVENT_HISTORY) {
             eventHistory.removeFirst()
         }
         eventHistory.addLast(event)
+        persistHistory()
         notifyListeners()
     }
 
@@ -123,6 +169,7 @@ object ServiceStateHolder {
     @Synchronized
     fun clearHistory() {
         eventHistory.clear()
+        persistHistory()
         notifyListeners()
     }
 

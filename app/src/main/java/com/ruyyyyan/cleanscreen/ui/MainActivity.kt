@@ -241,7 +241,7 @@ class MainActivity : AppCompatActivity() {
         } else if (ShizukuHelper.isShizukuAvailable()) {
             AlertDialog.Builder(this)
                 .setTitle("授权 Shizuku 特权")
-                .setMessage("检测到手机已运行 Shizuku 服务，是否授权清屏访问？\n\n授权后可一键解除 OriginOS 6 敏感权限限制并自动保活无障碍。")
+                .setMessage("检测到手机已运行 Shizuku 服务，是否授权清屏访问？\n\n授权后可一键解除 OriginOS 6 敏感权限限制并辅助配置无障碍服务。")
                 .setPositiveButton("立即授权") { _, _ ->
                     ShizukuHelper.requestPermission()
                 }
@@ -252,7 +252,7 @@ class MainActivity : AppCompatActivity() {
                 .setTitle("Shizuku 状态说明")
                 .setMessage(
                     "Shizuku 当前未运行。\n\n" +
-                    "Shizuku 是一款免 Root 的 ADB 特权辅助工具。若您安装并启动了 Shizuku，清屏可直接通过特权接口自动激活无障碍服务并永久防杀。\n\n" +
+                    "Shizuku 是一款免 Root 的 ADB 特权辅助工具。若您安装并启动了 Shizuku，清屏可直接通过特权接口自动激活无障碍服务并配置电池优化白名单（无法保证系统不再停用服务）。\n\n" +
                     "若未安装或未启动 Shizuku，清屏仍将基于系统标准无障碍服务正常工作。"
                 )
                 .setPositiveButton("知道了", null)

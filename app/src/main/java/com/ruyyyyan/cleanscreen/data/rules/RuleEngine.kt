@@ -125,11 +125,13 @@ class RuleEngine private constructor(private val context: Context) {
         rootNode: AccessibilityNodeInfo,
         packageName: String,
         currentActivity: String,
-        screenHeight: Int
+        screenHeight: Int,
+        budget: ScanBudget = ScanBudget()
     ): MatchAction? {
         val candidates = rulesByPackage[packageName] ?: return null
 
         for (rule in candidates) {
+            if (!budget.hasRemaining()) return null
             if (!rule.isEnabled) continue
 
             // Activity-level filtering: if rule specifies activityIds, currentActivity must match
@@ -148,7 +150,7 @@ class RuleEngine private constructor(private val context: Context) {
             }
 
             // 2. Node search according to rule criteria
-            val matchedNode = findNodeMatchingRule(rootNode, rule, screenHeight)
+            val matchedNode = findNodeMatchingRule(rootNode, rule, screenHeight, budget)
             if (matchedNode != null) {
                 return MatchAction.NodeMatch(matchedNode, rule)
             }
@@ -176,9 +178,10 @@ class RuleEngine private constructor(private val context: Context) {
         rootNode: AccessibilityNodeInfo,
         rule: SkipRule,
         screenHeight: Int,
+        budget: ScanBudget,
         depth: Int = 0
     ): AccessibilityNodeInfo? {
-        if (depth > 12) return null
+        if (depth > 12 || !budget.visit() || !rootNode.isVisibleToUser) return null
 
         // 1. Fast path: check targetId if defined
         if (rule.targetId.isNotEmpty()) {
@@ -211,8 +214,9 @@ class RuleEngine private constructor(private val context: Context) {
         // DFS through children
         val count = rootNode.childCount
         for (i in 0 until count) {
+            if (!budget.hasRemaining()) break
             val child = rootNode.getChild(i) ?: continue
-            val found = findNodeMatchingRule(child, rule, screenHeight, depth + 1)
+            val found = findNodeMatchingRule(child, rule, screenHeight, budget, depth + 1)
             if (found != null) {
                 return found
             }
@@ -222,10 +226,11 @@ class RuleEngine private constructor(private val context: Context) {
     }
 
     private fun validatePosition(node: AccessibilityNodeInfo, zone: SkipRule.PositionZone, screenHeight: Int): Boolean {
-        if (zone == SkipRule.PositionZone.ANY) return true
-
+        if (!node.isVisibleToUser || !node.isEnabled) return false
         val rect = Rect()
         node.getBoundsInScreen(rect)
+        if (rect.isEmpty || rect.bottom <= 0 || rect.top >= screenHeight) return false
+        if (zone == SkipRule.PositionZone.ANY) return true
 
         val isTop = rect.top <= screenHeight * 0.25
         val isBottom = rect.bottom >= screenHeight * 0.85
@@ -240,10 +245,14 @@ class RuleEngine private constructor(private val context: Context) {
 
     private fun matchRegex(regexStr: String, content: String): Boolean {
         if (content.isEmpty()) return false
-        val pattern = regexCache.getOrPut(regexStr) {
-            Pattern.compile(regexStr, Pattern.CASE_INSENSITIVE)
+        return try {
+            val pattern = regexCache.getOrPut(regexStr) {
+                Pattern.compile(regexStr, Pattern.CASE_INSENSITIVE)
+            }
+            pattern.matcher(content).matches()
+        } catch (_: java.util.regex.PatternSyntaxException) {
+            false // An invalid imported regex must not prevent generic matching.
         }
-        return pattern.matcher(content).matches()
     }
 
     /**

@@ -7,6 +7,7 @@ class CleanScreenApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        com.ruyyyyan.cleanscreen.utils.ServiceStateHolder.initialize(this)
         
         // 捕获异常记录日志，并委托给系统默认处理器以保证正常的系统崩溃与恢复流程
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()

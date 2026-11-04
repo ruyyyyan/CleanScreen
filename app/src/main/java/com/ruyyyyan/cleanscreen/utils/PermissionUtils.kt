@@ -3,6 +3,7 @@ package com.ruyyyyan.cleanscreen.utils
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.AppOpsManager
 import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -30,7 +31,6 @@ object PermissionUtils {
      */
     fun isAccessibilityServiceConfigured(context: Context): Boolean {
         return try {
-            val expectedServiceName = "${context.packageName}/${CleanScreenAccessibilityService::class.java.name}"
             val enabledServices = Settings.Secure.getString(
                 context.contentResolver,
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
@@ -40,7 +40,7 @@ object PermissionUtils {
             colonSplitter.setString(enabledServices)
             while (colonSplitter.hasNext()) {
                 val componentName = colonSplitter.next()
-                if (componentName.equals(expectedServiceName, ignoreCase = true)) {
+                if (ComponentName.unflattenFromString(componentName) == ComponentName(context, CleanScreenAccessibilityService::class.java)) {
                     return true
                 }
             }
@@ -51,7 +51,7 @@ object PermissionUtils {
     }
 
     /**
-     * Checks whether the service is actively registered in AccessibilityManager bound list.
+     * Reads the enabled-service list; this API does not prove a live service binding.
      */
     fun isServiceListedInAms(context: Context): Boolean {
         return try {
@@ -85,7 +85,9 @@ object PermissionUtils {
             val isProcessAliveAndBound = CleanScreenAccessibilityService.isServiceRunning
             val isAmsActive = isServiceListedInAms(context)
 
-            if (isProcessAliveAndBound && isAmsActive) {
+            val globalEnabled = Settings.Secure.getInt(context.contentResolver,
+                Settings.Secure.ACCESSIBILITY_ENABLED, 0) == 1
+            if (isProcessAliveAndBound && isAmsActive && globalEnabled) {
                 return AccessibilityServiceState.RUNNING
             }
 

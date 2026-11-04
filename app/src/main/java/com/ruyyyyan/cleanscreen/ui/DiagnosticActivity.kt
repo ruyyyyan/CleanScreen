@@ -191,7 +191,7 @@ class DiagnosticActivity : AppCompatActivity() {
         val shizukuDesc = if (ShizukuHelper.isPermissionGranted()) "GRANTED (已授权高权限)" else if (ShizukuHelper.isShizukuAvailable()) "AVAILABLE (运行中但未授权)" else "NOT_RUNNING (未运行)"
         sb.append("• Shizuku 特权状态: ").append(shizukuDesc).append("\n")
         sb.append("• 全局无障碍开关 (accessibility_enabled): ").append(if (isAccessibilityGlobalOn) "1 (开启)" else "0 (关闭)").append("\n")
-        sb.append("• AMS 已绑定列表中是否存在本服务: ").append(if (isListedInAms) "YES (已绑定)" else "NO (未列入)").append("\n")
+        sb.append("• 系统已启用列表中是否存在本服务: ").append(if (isListedInAms) "YES (已启用)" else "NO (未列入)").append("\n")
         sb.append("• 服务内存实例状态: ").append(if (isInstanceRunning) "ACTIVE (运行中)" else "INACTIVE (空闲/未实例化)").append("\n")
         sb.append("• 系统启用服务记录:\n  ").append(enabledServicesStr.replace(":", "\n  "))
 
@@ -201,7 +201,7 @@ class DiagnosticActivity : AppCompatActivity() {
     private fun renderLifecycleTimeline() {
         val events = ServiceStateHolder.getEventHistory()
         if (events.isEmpty()) {
-            binding.tvLifecycleEvents.text = "本进程启动以来暂无生命周期事件回调记录\n(提示: 仅当系统触发服务生命周期方法时此处会产生记录)"
+            binding.tvLifecycleEvents.text = "暂无保存的生命周期事件回调记录\n(提示: 仅当系统触发服务生命周期方法时此处会产生记录)"
             return
         }
 
@@ -222,7 +222,7 @@ class DiagnosticActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("解除 Android 16【受限制的设置】")
             .setMessage(
-                "Android 13+ 对浏览器或本地直接安装的 APK 强制限制敏感权限，导致无障碍开关刚开启就被系统秒关。\n\n" +
+                "Android 13+ 可能限制侧载应用开启无障碍权限。若系统明确提示受限制，可按以下步骤检查；此限制不代表服务自动断开的原因。\n\n" +
                 "【解除步骤】：\n" +
                 "1. 点击下方【前往应用信息】；\n" +
                 "2. 在应用信息页，点击右上角【三点菜单 (⋮)】；\n" +
@@ -264,15 +264,17 @@ class DiagnosticActivity : AppCompatActivity() {
         sb.append("Restricted Settings: ").append(restricted.label).append("\n")
         sb.append("Process PID: ").append(Process.myPid()).append("\n")
         sb.append("Service Instance Running: ").append(CleanScreenAccessibilityService.isServiceRunning).append("\n")
-        sb.append("Listed in AMS Bound Services: ").append(isAmsListed).append("\n")
+        sb.append("Listed in System Enabled Services: ").append(isAmsListed).append("\n")
         sb.append("Settings.Secure.enabled_accessibility_services: ").append(enabledServicesStr).append("\n\n")
-        sb.append("--- Lifecycle Event History ---\n")
+        sb.append("Global accessibility_enabled: ").append(Settings.Secure.getInt(contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0)).append("\n")
+        sb.append("Battery optimization exempt: ").append(PermissionUtils.isIgnoringBatteryOptimizations(this)).append("\n")
+        sb.append("--- Lifecycle Event History (saved across restarts) ---\n")
         val events = ServiceStateHolder.getEventHistory()
         if (events.isEmpty()) {
             sb.append("(No lifecycle events recorded yet)\n")
         } else {
             for (e in events) {
-                sb.append(e.getFormattedTime()).append(" | ").append(e.eventName).append(" | ").append(e.details).append("\n")
+                sb.append(e.getFormattedTime()).append(" | ").append(e.eventName).append(" | PID=").append(e.pid).append(" | ").append(e.details).append("\n")
             }
         }
         sb.append("==================================================\n")
