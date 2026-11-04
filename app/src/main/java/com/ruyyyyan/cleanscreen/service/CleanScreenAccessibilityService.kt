@@ -18,7 +18,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.ruyyyyan.cleanscreen.data.model.InterceptRecord
 import com.ruyyyyan.cleanscreen.data.repository.InterceptRepository
 import com.ruyyyyan.cleanscreen.data.rules.RuleEngine
-import com.ruyyyyan.cleanscreen.ui.FloatingToast
+import com.ruyyyyan.cleanscreen.utils.FloatingToast
 import com.ruyyyyan.cleanscreen.utils.ServiceStateHolder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
@@ -230,7 +230,7 @@ class CleanScreenAccessibilityService : AccessibilityService() {
                                 InterceptRecord(
                                     packageName = lastForegroundPackage,
                                     appName = originalAppName,
-                                    type = InterceptRecord.TYPE_PREVENT_JUMP,
+                                    type = InterceptRecord.TYPE_MISCLICK_RETURN,
                                     description = "已拦截开屏误触跳转至【$targetAppName】"
                                 )
                             )

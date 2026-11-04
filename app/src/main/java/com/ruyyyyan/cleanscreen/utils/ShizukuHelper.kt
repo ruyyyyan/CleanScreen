@@ -6,6 +6,7 @@ import android.util.Log
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.lang.reflect.Method
 
 /**
  * Shizuku privileged system integration helper.
@@ -56,6 +57,18 @@ object ShizukuHelper {
         }
     }
 
+    private fun createProcess(command: Array<String>): Process {
+        val method: Method = Shizuku::class.java.getDeclaredMethod(
+            "newProcess",
+            Array<String>::class.java,
+            Array<String>::class.java,
+            String::class.java
+        )
+        method.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return method.invoke(null, command, null, null) as Process
+    }
+
     /**
      * Executes a shell command using Shizuku privileged binder.
      */
@@ -65,7 +78,7 @@ object ShizukuHelper {
         }
 
         return try {
-            val process = Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
+            val process = createProcess(arrayOf("sh", "-c", command))
             val stdout = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
             val stderr = BufferedReader(InputStreamReader(process.errorStream)).use { it.readText() }
             val exitCode = process.waitFor()
